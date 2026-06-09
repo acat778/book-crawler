@@ -9,8 +9,8 @@ export default {
   mysql: {
     host: process.env.MYSQL_HOST || '192.168.250.50',
     port: parseInt(process.env.MYSQL_PORT, 10) || 3306,
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || 'root',
+    user: process.env.MYSQL_USER || 'acat_remote',
+    password: process.env.MYSQL_PASSWORD || 'mysql@acat.fun',
     database: process.env.MYSQL_DATABASE || 'acat_dev',
     charset: 'utf8mb4',
   },
