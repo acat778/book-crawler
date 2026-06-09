@@ -61,53 +61,63 @@ export class SearchService {
    * 策略1: 浏览 69shuba 分类页，筛选匹配关键词的书籍
    */
   async #browseCategory(browser, keyword, pageNum) {
-    // 69shuba 分类列表页（公开可访问）
+    // 69shuba 公开分类/榜单页
     const categoryUrls = [
-      `https://www.69shuba.com/novels/class/0_${pageNum + 1}.htm`,  // 全部分类
-      `https://www.69shuba.com/novels/class/0_0_0_0_0_0_0_${pageNum + 1}.htm`,  // 另一种分页格式
+      `https://www.69shuba.com/novels/class/0.htm`,   // 全部分类
+      `https://www.69shuba.com/novels/full`,           // 完本
+      `https://www.69shuba.com/novels/hot`,            // 热门
+      `https://www.69shuba.com/last.html`,             // 最新更新
     ];
+
+    // 只取第一个页面（pageNum=0），后续页走其他策略
+    if (pageNum > 0) {
+      return [];
+    }
 
     for (const url of categoryUrls) {
       try {
         console.log(`[Search] 浏览分类页: ${url}`);
-        const html = await this.#fetchWithBrowser(browser, url, 'ul.ranklist li, .novelslist li, .booklist li');
+        const html = await this.#fetchWithBrowser(browser, url, 'h3 a, a.btn');
         if (!html) continue;
 
         const $ = cheerio.load(html);
         const results = [];
+        const seenUrls = new Set();
 
-        // 尝试多种选择器匹配书籍列表项
-        const items = $('li, .item, .book-item, tr, .novelitem');
+        // 从 h3 标签提取书名（69shuba 的分类页结构：h3 > a[href*=book]）
+        $('h3 a[href*="/book/"]').each((_i, el) => {
+          const $el = $(el);
+          const href = $el.attr('href') || '';
+          const title = $el.text().trim();
+          if (!title || seenUrls.has(href)) return;
+          seenUrls.add(href);
 
-        items.each((_i, el) => {
-          try {
-            const $el = $(el);
-            const $link = $el.find('a').first();
-            const href = $link.attr('href') || '';
-            const title = $link.text().trim();
-            const snippet = $el.text().trim().substring(0, 200);
-
-            // 过滤：只保留 href 包含 book 或 txt 的链接
-            if (!href || (!href.includes('/book/') && !href.includes('/txt/') && !href.includes('.htm'))) return;
-            if (!title) return;
-
-            // 关键词过滤
-            const kw = keyword.toLowerCase();
-            if (!title.toLowerCase().includes(kw) && !snippet.toLowerCase().includes(kw)) return;
-
-            // 补全 URL
+          if (this.#matchKeyword(title, keyword)) {
             const fullUrl = href.startsWith('http') ? href : baseUrl + href;
-
-            // 去重
-            if (results.find(r => r.url === fullUrl)) return;
-
-            results.push({ title, url: fullUrl, snippet: snippet.substring(0, 200) });
-          } catch (_) { /* skip */ }
+            results.push({ title, url: fullUrl, snippet: '' });
+          }
         });
+
+        // 也检查 a.btn 和 a[href*="/book/"] 中的书名（排除 imgbox）
+        if (results.length === 0) {
+          $('a[href*="/book/"]').each((_i, el) => {
+            const $el = $(el);
+            const href = $el.attr('href') || '';
+            const title = $el.text().trim();
+            // 跳过图片链接和无文字链接
+            if (!title || title === '点击阅读' || seenUrls.has(href)) return;
+            seenUrls.add(href);
+
+            if (this.#matchKeyword(title, keyword)) {
+              const fullUrl = href.startsWith('http') ? href : baseUrl + href;
+              results.push({ title, url: fullUrl, snippet: '' });
+            }
+          });
+        }
 
         if (results.length > 0) {
           console.log(`[Search] 分类页返回 ${results.length} 条匹配结果 (keyword=${keyword})`);
-          return results.slice(0, 20); // 最多返回 20 条
+          return results.slice(0, 20);
         }
       } catch (err) {
         console.warn(`[Search] 分类页失败: ${url} - ${err.message}`);
@@ -115,6 +125,11 @@ export class SearchService {
     }
 
     return [];
+  }
+
+  /** 检查标题是否匹配关键词（忽略大小写） */
+  #matchKeyword(title, keyword) {
+    return title.toLowerCase().includes(keyword.toLowerCase());
   }
 
   /**
