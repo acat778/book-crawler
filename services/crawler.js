@@ -195,7 +195,12 @@ export class CrawlerService {
           try {
             const paragraphs = await this.crawlChapterContent(chapterUrl);
             if (paragraphs.length > 0) {
-              await saveParagraphs(bookId, chapter.id, paragraphs);
+              try {
+                await saveParagraphs(bookId, chapter.id, paragraphs);
+              } catch (mongoErr) {
+                // MongoDB 写入失败不应中断章节处理
+                console.warn(`[Crawler] MongoDB 存储失败 (${chapterTitle}): ${mongoErr.message}`);
+              }
               const wordCount = paragraphs.reduce((sum, p) => sum + p.length, 0);
               await query(
                 'UPDATE t_book_chapter SET word_count = ? WHERE id = ?',
