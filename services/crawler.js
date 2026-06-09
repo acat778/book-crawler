@@ -1,9 +1,9 @@
-import axios from 'axios';
 import * as cheerio from 'cheerio';
 import config from '../config.js';
 import { generateId, query, queryOne, insert } from '../db/mysql.js';
 import { saveParagraphs } from '../db/mongodb.js';
 import { googleSearchService } from './google-search.js';
+import { fetchHtml } from './browser.js';
 
 const { baseUrl, selectors } = config.crawler;
 
@@ -298,20 +298,14 @@ export class CrawlerService {
   // ==================== 工具方法 ====================
 
   /**
-   * 发送 HTTP GET 请求获取页面 HTML
+   * 获取页面 HTML（优先 Puppeteer，回退 axios）
    */
   async _fetchPage(url) {
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': baseUrl,
-      },
+    return fetchHtml(url, {
+      waitUntil: 'domcontentloaded',
       timeout: 30000,
-      maxRedirects: 5,
+      waitSelector: '#catalog, h1, .chapter-content',
     });
-    return response.data;
   }
 
   /**
