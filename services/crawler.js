@@ -39,25 +39,21 @@ export class CrawlerService {
       const html = await this._fetchPage(bookUrl);
       const $ = cheerio.load(html);
 
-      // 提取书籍信息
-      const title = this._text($, selectors.book.title);
-      const authorName = this._text($, selectors.book.author);
-      const categoryName = this._text($, selectors.book.category);
-      const statusText = this._text($, selectors.book.status);
+      // 优先从 meta 标签提取信息（最可靠）
+      const metaTag = (name) => $(`meta[property="${name}"]`).attr('content') || '';
 
-      // 尝试获取简介（可能需要展开）
-      let introduction = this._text($, selectors.book.introduction);
-      if (!introduction) {
-        // 尝试另一种选择器
-        introduction = this._text($, 'div.intro, .intro, [class*="intro"] p');
+      const title = metaTag('og:title') || this._text($, 'h1 a') || this._text($, 'h1');
+      const authorName = metaTag('og:novel:author');
+      const categoryName = metaTag('og:novel:category');
+      const introduction = metaTag('og:description').replace(/<br\s*\/?>/gi, '\n');
+      let statusText = metaTag('og:novel:status');
+
+      // fallback: 从可见文本提取
+      if (!authorName) {
+        const authorP = $('p').filter((_i, el) => $(el).text().includes('作者')).first();
+        const authorLink = authorP.find('a').first().text().trim();
+        if (authorLink) statusText = statusText; // keep as-is
       }
-
-      // 提取标签
-      const tags = [];
-      $(selectors.book.tags).each((_i, el) => {
-        const tagText = $(el).text().trim();
-        if (tagText) tags.push(tagText);
-      });
 
       if (!title) {
         return { success: false, message: '无法提取书籍标题' };
@@ -70,14 +66,11 @@ export class CrawlerService {
       if (categoryName) {
         await this._findOrCreateDictData(CATEGORY_DICT_ID, categoryName);
       }
-      for (const tag of tags) {
-        await this._findOrCreateDictData(TAG_DICT_ID, tag);
-      }
 
       const bookStatus = this._parseStatus(statusText);
       const book = await this._findOrCreateBook(title, authorId, categoryName, introduction, bookStatus);
 
-      // 爬取目录和章节
+      // 爬取目录和章节 — 目录可能在独立页面（如 /book/12345/）
       const chapterCount = await this._crawlChapters($, book.id, bookUrl);
 
       return {
@@ -109,16 +102,22 @@ export class CrawlerService {
       const $ = cheerio.load(html);
 
       // 尝试多种选择器获取内容区
-      const contentEl = $(selectors.chapter.content);
-      if (!contentEl.length) {
-        // 尝试备选选择器
-        const altContent = $('#content, .content, [class*="content"] article, .chapter-content');
-        if (!altContent.length) return [];
-        const fullText = altContent.first().text();
-        return this._splitParagraphs(fullText);
+      // 尝试多种内容区选择器
+      const contentSelectors = [
+        '#content', '.content', '#chaptercontent', '.chapter-content',
+        '[class*="content"]', 'article', '#htmlContent',
+        'body > div:nth-child(2) > div:nth-child(1) > div:nth-child(3)',
+      ];
+      let fullText = '';
+      for (const sel of contentSelectors) {
+        const el = $(sel);
+        if (el.length) {
+          fullText = el.first().text();
+          if (fullText.trim().length > 50) break;
+        }
       }
+      if (!fullText) return [];
 
-      const fullText = contentEl.text();
       return this._splitParagraphs(fullText);
     } catch (err) {
       console.error(`[Crawler] 爬取章节内容失败: ${chapterUrl}`, err.message);
@@ -133,33 +132,63 @@ export class CrawlerService {
    */
   async _crawlChapters($, bookId, bookUrl) {
     try {
-      const catalog = $(selectors.chapter.catalog);
-      if (!catalog.length) {
-        console.warn('[Crawler] 未找到目录元素 #catalog');
+      // 目录页面 URL：将 /book/12345.htm 转为 /book/12345/
+      let catalogUrl = bookUrl.replace(/\.htm$/, '/');
+      // 如果已经是 /book/12345/ 格式，保持一致
+      if (!catalogUrl.endsWith('/')) {
+        catalogUrl = bookUrl.replace(/\.htm.*$/, '/');
+      }
+
+      console.log(`[Crawler] 加载目录页: ${catalogUrl}`);
+      let catalogHtml;
+      try {
+        catalogHtml = await this._fetchPage(catalogUrl);
+      } catch {
+        // 目录页加载失败，尝试从原页面提取
+        catalogHtml = $.html();
+      }
+
+      const $catalog = cheerio.load(catalogHtml);
+
+      // 尝试多种目录选择器
+      let chapterLinks = [];
+      const selectors = [
+        'ul.chapterlist a, ul.list a, .catalog a',
+        'div.catalog a, #catalog a',
+        'a[href*="/txt/"]',
+        '.book_last Chapter a, .chapter a',
+        'ul li a[href*="/txt/"]',
+      ];
+
+      for (const sel of selectors) {
+        $catalog(sel).each((_i, el) => {
+          const href = $catalog(el).attr('href') || '';
+          const text = $catalog(el).text().trim();
+          if (href && text) {
+            chapterLinks.push({
+              title: text,
+              url: href.startsWith('http') ? href : baseUrl + href,
+            });
+          }
+        });
+        if (chapterLinks.length > 0) break;
+      }
+
+      if (chapterLinks.length === 0) {
+        console.warn('[Crawler] 未找到章节链接');
         return 0;
       }
 
-      const items = catalog.find('li');
+      console.log(`[Crawler] 找到 ${chapterLinks.length} 个章节`);
+
       let count = 0;
-      let sortOrder = 1;
-
-      for (const liEl of items.toArray()) {
-        const $li = $(liEl);
-        const $anchor = $li.find('a').first();
-        if (!$anchor.length) continue;
-
-        const chapterTitle = $anchor.text().trim();
-        let chapterUrl = $anchor.attr('href') || '';
+      for (let i = 0; i < chapterLinks.length; i++) {
+        const { title: chapterTitle, url: chapterUrl } = chapterLinks[i];
 
         if (!chapterTitle) continue;
 
-        // 补全相对 URL
-        if (chapterUrl && !chapterUrl.startsWith('http')) {
-          chapterUrl = baseUrl + chapterUrl;
-        }
-
         // 创建章节记录
-        const chapter = await this._findOrCreateChapter(bookId, chapterTitle, sortOrder);
+        const chapter = await this._findOrCreateChapter(bookId, chapterTitle, i + 1);
 
         // 爬取章节内容
         if (chapterUrl) {
@@ -179,7 +208,6 @@ export class CrawlerService {
         }
 
         count++;
-        sortOrder++;
       }
 
       console.log(`[Crawler] 目录爬取完成: bookId=${bookId}, chapters=${count}`);
