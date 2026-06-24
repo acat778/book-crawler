@@ -1,0 +1,99 @@
+# ============================================
+# book-crawler CI/CD Pipeline
+# Runner: 自托管 runner（标签: test, Linux X64）
+# 策略: 依赖安装+编译在 Docker 容器内完成，应用也以 Docker 容器运行
+#       宿主机仅需 Docker + Git
+# ============================================
+name: CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: '构建完成后部署'
+        type: boolean
+        default: false
+
+env:
+  NODE_IMAGE: node:22
+
+jobs:
+  # ============================================================
+  # 构建 + 部署
+  # ============================================================
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ==========================================================
+      # 阶段 1: 安装后端依赖（Docker 容器内）
+      # ==========================================================
+      - name: 安装后端依赖（容器内 node:22）
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            $NODE_IMAGE \
+            npm install --no-audit
+
+      # ==========================================================
+      # 阶段 2: 安装前端依赖并编译（Docker 容器内）
+      # ==========================================================
+      - name: 安装前端依赖并编译（容器内 node:22）
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            $NODE_IMAGE \
+            sh -c 'cd frontend && npm install --no-audit && npm run build'
+
+      # ==========================================================
+      # 阶段 3: 部署（Docker 容器）
+      # 仅 push to master 或手动触发 deploy=true 时执行
+      # ==========================================================
+      - name: 部署到测试环境
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+          (github.event_name == 'workflow_dispatch' && inputs.deploy)
+        run: |
+          echo "=== 构建 Docker 镜像 ==="
+          docker build -t book-crawler:latest ${{ github.workspace }}
+
+          echo ""
+          echo "=== 更新容器 ==="
+          docker stop book-crawler 2>/dev/null && echo "已停止旧容器" || echo "无需停止（容器不存在）"
+          docker rm book-crawler 2>/dev/null || true
+
+          # 确保持久化数据目录存在（爬取状态文件）
+          mkdir -p /opt/book-crawler-data
+
+          docker run -d --name book-crawler \
+            --network host \
+            --restart unless-stopped \
+            -v /opt/book-crawler-data:/app/data \
+            -e NODE_ENV=production \
+            -e PORT=8001 \
+            -e API_BASE_URL=http://localhost:9000 \
+            -e CRAWLER_API_BASE_URL=http://localhost:9006 \
+            -e API_TIMEOUT=30000 \
+            -e CRAWLER_USERNAME=crawler \
+            -e CRAWLER_PASSWORD=123456 \
+            -e CRAWLER_USER_ID=4 \
+            -e GOOGLE_SEARCH_URL=https://www.google.com/search \
+            -e BASE_URL=https://www.69shuba.com \
+            -e WS_URL=ws://localhost:9005 \
+            book-crawler:latest
+
+          echo ""
+          echo "=== 容器状态 ==="
+          docker ps --filter name=book-crawler --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
+          echo ""
+          echo "=== 部署完成 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S') (UTC+8) ==="

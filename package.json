@@ -1,0 +1,28 @@
+{
+  "name": "book-crawler",
+  "version": "2.0.0",
+  "description": "书籍爬虫工具 - 通过Google搜索69shuba.com书籍并爬取内容 (Node.js版)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:all": "node -e \"const{spawn}=require('child_process');spawn('node',['--watch','src/server.js'],{stdio:'inherit',shell:true});spawn('npm',['run','dev'],{cwd:'frontend',stdio:'inherit',shell:true})\"",
+    "start": "node src/server.js",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "iconv-lite": "^0.7.2",
+    "lossless-json": "^4.3.0",
+    "puppeteer": "^24.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

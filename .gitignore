@@ -1,0 +1,40 @@
+# 依赖
+node_modules/
+frontend/node_modules/
+package-lock.json
+frontend/package-lock.json
+
+# 构建产物
+frontend/dist/
+*.tsbuildinfo
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 日志
+logs/*.log
+!logs/.gitkeep
+
+# 爬取追踪数据（本地文件）
+data/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
+
+# GitLab CI 备份（本地保留）
+.gitlab-backup/
+
+# AI 助手指引文件（本地保留，不提交）
+CLAUDE.md
+AGENTS.md
