@@ -503,29 +503,15 @@ export class ApiClient {
 
     // 3. 上传
     try {
-      await this.ensureToken();
-      const resp = await this.http.post(
-        '/api/book/file/upload',
-        formData,
-        {
-          headers: {
-            satoken: this.token,
-            // axios 自动设置 Content-Type 为 multipart/form-data + boundary
-          },
-          timeout: 30000,
-        },
-      );
+      const resp = await this.post('/api/book/file', formData, true);
 
-      if (resp.data?.code !== 0) {
-        console.warn(`[ApiClient] 封面上传失败: ${resp.data?.message || 'unknown'}`);
+      if (resp?.code !== 0) {
+        console.warn(`[ApiClient] 封面上传失败: ${resp?.message || 'unknown'}`);
         return null;
       }
-      console.log(`[ApiClient] 封面上传成功: fileId=${resp.data.data.id}, name=${resp.data.data.name}`);
-      return resp.data.data;
+      console.log(`[ApiClient] 封面上传成功: fileId=${resp.data.id}, name=${resp.data.name}`);
+      return resp.data;
     } catch (err) {
-      if (err.response?.status === 401) {
-        console.warn('[ApiClient] Token 过期（上传），重新登录后不重试上传');
-      }
       console.warn(`[ApiClient] 封面上传异常: ${imageUrl}`, err.message);
       return null;
     }

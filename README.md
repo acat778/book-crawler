@@ -75,7 +75,7 @@ book-crawler (Node.js)
     │   ├── POST /api/book/crawler/tags                 创建标签
     │   ├── POST /api/book/crawler/books                创建书籍（含标签关联）
     │   ├── POST /api/book/crawler/chapters             创建章节（回退用）
-    │   └── POST /api/book/file/upload                  上传封面图片
+    │   └── POST /api/book/file                         上传封面图片
     │
     └── 本地文件 (data/crawls/)
         └── 爬取状态追踪（已爬取/失败章节记录）
