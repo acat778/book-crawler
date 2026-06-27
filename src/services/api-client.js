@@ -188,8 +188,11 @@ export class ApiClient {
     const headers = { satoken: this.token };
     if (!isFormData) {
       headers['Content-Type'] = 'application/json';
+    } else {
+      delete this.http.defaults.headers.common['Content-Type'];
+      delete this.http.defaults.headers.post['Content-Type'];
     }
-    // axios 在 body 为 FormData 时自动设置 Content-Type 和 boundary
+    // multipart 请求不能沿用实例默认的 application/json，axios 会按 FormData 自动设置 boundary。
 
     try {
       const resp = await this.http.post(path, body, { headers });
@@ -201,6 +204,9 @@ export class ApiClient {
         const headers2 = { satoken: this.token };
         if (!isFormData) {
           headers2['Content-Type'] = 'application/json';
+        } else {
+          delete this.http.defaults.headers.common['Content-Type'];
+          delete this.http.defaults.headers.post['Content-Type'];
         }
         const retryResp = await this.http.post(path, body, { headers: headers2 });
         return retryResp.data;
@@ -214,6 +220,9 @@ export class ApiClient {
         const headers2 = { satoken: this.token };
         if (!isFormData) {
           headers2['Content-Type'] = 'application/json';
+        } else {
+          delete this.http.defaults.headers.common['Content-Type'];
+          delete this.http.defaults.headers.post['Content-Type'];
         }
         const resp = await this.http.post(path, body, { headers: headers2 });
         return resp.data;
