@@ -7,7 +7,6 @@ import {
   getCrawledChapterUrls,
 } from './crawl-tracker.js';
 import { ApiClient } from '../services/api-client.js';
-import { getCrawlerDataSender } from '../services/crawler-data-sender.js';
 
 const COVER_FILE_ID = 0;
 
@@ -24,7 +23,6 @@ export class StorageService {
   constructor(userId) {
     this.userId = userId;
     this.api = ApiClient.getInstance();
-    this.wsSender = getCrawlerDataSender();
   }
 
   // ==================== 编码工具 ====================

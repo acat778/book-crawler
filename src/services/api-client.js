@@ -478,6 +478,31 @@ export class ApiClient {
     }
   }
 
+  // ==================== Crawler API — 任务状态 ====================
+
+  /**
+   * 上报爬虫任务状态
+   * POST /api/book/crawler/tasks/status
+   * @param {string} bookId - 书籍 ID
+   * @param {'crawling'|'completed'|'failed'} status - 任务状态
+   * @param {object} [extra={}] - 额外信息 { total, crawled, title, error }
+   * @returns {Promise<void>}
+   */
+  async reportTaskStatus(bookId, status, extra = {}) {
+    try {
+      const resp = await this.post(`${this.crawlerBaseUrl}/api/book/crawler/tasks/status`, {
+        bookId,
+        status,
+        ...extra,
+      });
+      if (resp?.code !== 0) {
+        console.warn(`[ApiClient] 上报任务状态失败: ${resp?.message || 'unknown'}`);
+      }
+    } catch (err) {
+      console.warn(`[ApiClient] 上报任务状态异常: bookId=${bookId}, status=${status}`, err.message);
+    }
+  }
+
   // ==================== 文件上传 ====================
 
   /**

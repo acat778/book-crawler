@@ -1,8 +1,8 @@
 # Book Crawler — 书籍爬虫工具
 
-通过 Google 搜索 [69shuba.com](https://www.69shuba.com) 书籍，自动提取书名、作者、分类、目录，并将章节内容通过 WebSocket 推送到后端服务。
+通过搜索引擎查找书籍，自动提取书名、作者、分类、目录，并将章节内容通过 REST API 推送到后端服务。
 
-> v5.0: 章节内容通过 WebSocket 直连 `acat-book-websocket` 推送（不走网关），书籍元数据仍通过 REST API 操作。
+> v5.1: 所有数据操作统一通过 REST API 完成，WebSocket 通道已移除。
 
 ## 技术栈
 
@@ -14,8 +14,7 @@
 | **构建工具** | Vite 8.x |
 | **HTML 解析** | Cheerio（服务端 jQuery） |
 | **HTTP 客户端** | Axios |
-| **WebSocket 客户端** | Node.js 原生 WebSocket |
-| **数据服务** | 通过 acat-book-book REST API + acat-book-websocket WebSocket 推送 |
+| **数据服务** | 通过 acat-book-book REST API |
 | **进程管理** | Docker（生产环境） |
 
 ## 项目结构
@@ -27,12 +26,10 @@ book-crawler/
 │   ├── config.js              # 应用配置
 │   ├── services/
 │   │   ├── api-client.js      # REST API 客户端
-│   │   ├── ws-client.js       # WebSocket 客户端（直连 WS 服务）
-│   │   ├── crawler-data-sender.js  # WS 数据推送层
 │   │   ├── crawler.js         # 爬虫核心服务
 │   │   └── browser.js         # 共享 Puppeteer 浏览器实例
 │   ├── store/
-│   │   ├── storage.js         # 数据持久化（API + WS）
+│   │   ├── storage.js         # 数据持久化（REST API）
 │   │   └── crawl-tracker.js   # 爬取状态本地追踪
 │   ├── sites/
 │   │   ├── SiteAdapter.js     # 站点适配器基类
@@ -60,11 +57,6 @@ book-crawler/
 ```
 book-crawler (Node.js)
     │
-    ├── WebSocket (直连, 不走网关)
-    │   └── ws://websocket-service:9005/ws/crawler?token=xxx
-    │       推送: push_book / push_chapter / push_paragraphs / task_status
-    │       订阅: ws:crawler:book:result / ws:crawler:chapter:result
-    │
     ├── REST (通过 API 网关)
     │   ├── GET  /api/book/crawler/authors?match=...    查询/匹配作者
     │   ├── GET  /api/book/crawler/categories?match=... 查询/匹配分类
@@ -74,7 +66,8 @@ book-crawler (Node.js)
     │   ├── POST /api/book/crawler/categories           创建分类
     │   ├── POST /api/book/crawler/tags                 创建标签
     │   ├── POST /api/book/crawler/books                创建书籍（含标签关联）
-    │   ├── POST /api/book/crawler/chapters             创建章节（回退用）
+    │   ├── POST /api/book/crawler/chapters             创建章节
+    │   ├── POST /api/book/crawler/tasks/status         上报任务状态
     │   └── POST /api/book/file                         上传封面图片
     │
     └── 本地文件 (data/crawls/)
@@ -186,10 +179,6 @@ POST /api/crawler/crawl-chapter?url={章节URL}
 | `CRAWLER_USERNAME` | `crawler` | 后端登录用户名 |
 | `CRAWLER_PASSWORD` | `123456` | 后端登录密码 |
 | `CRAWLER_USER_ID` | `4` | 爬虫用户 ID |
-| **WebSocket** | | |
-| `WS_URL` | `ws://localhost:9005` | WebSocket 服务直连地址（不走网关） |
-| `CRAWLER_WS_TOKEN` | — | 爬虫 WS 认证 Token（必填） |
-| `WS_RECONNECT_MS` | `5000` | WS 重连间隔基准值 ms |
 | `GOOGLE_SEARCH_URL` | `https://www.google.com/search` | Google 搜索地址 |
 
 ## 部署
@@ -207,12 +196,7 @@ docker run -d --name book-crawler --network host --restart unless-stopped \
   -e NODE_ENV=production -e PORT=8001 \
   -e API_BASE_URL=http://localhost:9000 -e API_TIMEOUT=30000 \
   -e CRAWLER_USERNAME=crawler -e CRAWLER_PASSWORD=123456 \
-  -e WS_URL=ws://localhost:9005 \
   book-crawler:latest
 ```
 
 详见 [部署指南](docs/部署指南.md)。
-
-## WebSocket 接口
-
-爬虫通过 WebSocket 直连 `acat-book-websocket` 服务（端口 9005）推送章节数据，详情参见 [WEBSOCKET_API.md](../acat-fun/acat-parent/acat-book-parent/acat-book-websocket/docs/WEBSOCKET_API.md)。

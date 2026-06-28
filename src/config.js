@@ -26,13 +26,4 @@ export default {
     googleSearchUrl: process.env.GOOGLE_SEARCH_URL || 'https://www.google.com/search',
   },
 
-  /** WebSocket 直连 acat-book-websocket 爬虫端点（不走网关） */
-  ws: {
-    /** WebSocket 服务地址（直连，非网关） */
-    url: process.env.WS_URL || 'ws://localhost:9005',
-    /** 爬虫认证 token（与用户 Sa-Token 独立） */
-    token: process.env.CRAWLER_WS_TOKEN || '',
-    /** 重连间隔 ms（指数退避基准值） */
-    reconnectIntervalMs: parseInt(process.env.WS_RECONNECT_MS, 10) || 5000,
-  },
 };
