@@ -3,7 +3,7 @@
  */
 export default {
   server: {
-    port: parseInt(process.env.PORT, 10) || 8005,
+    port: parseInt(process.env.PORT, 10) || 8609,
   },
 
   /** acat-book-book 后端 API 配置 */
