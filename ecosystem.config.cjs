@@ -7,9 +7,9 @@ module.exports = {
       cwd: __dirname,
       env: {
         NODE_ENV: 'production',
-        PORT: 8001,
+        PORT: 8005,
         API_BASE_URL: 'http://localhost:9000',
-        CRAWLER_API_BASE_URL: 'http://localhost:9006',
+        CRAWLER_API_BASE_URL: 'http://localhost:9605',
         API_TIMEOUT: '30000',
         CRAWLER_USERNAME: 'crawler',
         CRAWLER_PASSWORD: '123456',

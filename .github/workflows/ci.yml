@@ -79,9 +79,9 @@ jobs:
             --restart unless-stopped \
             -v /opt/book-crawler-data:/app/data \
             -e NODE_ENV=production \
-            -e PORT=8001 \
+            -e PORT=8005 \
             -e API_BASE_URL=http://localhost:9000 \
-            -e CRAWLER_API_BASE_URL=http://localhost:9006 \
+            -e CRAWLER_API_BASE_URL=http://localhost:9605 \
             -e API_TIMEOUT=30000 \
             -e CRAWLER_USERNAME=crawler \
             -e CRAWLER_PASSWORD=123456 \

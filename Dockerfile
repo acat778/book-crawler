@@ -29,6 +29,6 @@ COPY src ./src
 # 前端构建产物（CI 步骤编译）
 COPY frontend/dist ./frontend/dist
 
-EXPOSE 8001
+EXPOSE 8005
 
 CMD ["node", "src/server.js"]

@@ -100,8 +100,8 @@ npm run dev
 npm run dev:frontend
 ```
 
-- 后端: http://localhost:8001
-- 前端: http://localhost:5175（自动代理 /api → 8001）
+- 后端: http://localhost:8005
+- 前端: http://localhost:5175（自动代理 /api → 8005）
 
 ### 生产模式
 
@@ -113,7 +113,7 @@ cd frontend && npm run build && cd ..
 npm start
 ```
 
-访问 http://localhost:8001 即可使用。
+访问 http://localhost:8005 即可使用。
 
 ## API 接口
 
@@ -172,7 +172,7 @@ POST /api/crawler/crawl-chapter?url={章节URL}
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `PORT` | `8001` | 服务端口 |
+| `PORT` | `8005` | 服务端口 |
 | `API_BASE_URL` | `http://localhost:9000` | API 网关地址（REST 调用） |
 | `CRAWLER_API_BASE_URL` | 同 `API_BASE_URL` | Crawler API 地址（默认同网关） |
 | `API_TIMEOUT` | `30000` | HTTP 请求超时 ms |
@@ -193,7 +193,7 @@ docker build -t book-crawler:latest .
 # 2. 启动容器
 docker run -d --name book-crawler --network host --restart unless-stopped \
   -v /opt/book-crawler-data:/app/data \
-  -e NODE_ENV=production -e PORT=8001 \
+  -e NODE_ENV=production -e PORT=8005 \
   -e API_BASE_URL=http://localhost:9000 -e API_TIMEOUT=30000 \
   -e CRAWLER_USERNAME=crawler -e CRAWLER_PASSWORD=123456 \
   book-crawler:latest
