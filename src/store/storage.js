@@ -3,6 +3,7 @@ import {
   updateCrawlBookStatus,
   appendCrawlChapter,
   getCrawlRecord,
+  listCrawlRecords,
   deleteCrawlRecord,
   getCrawledChapterUrls,
 } from './crawl-tracker.js';
@@ -260,6 +261,10 @@ export class StorageService {
 
   async getCrawlRecord(bookId) {
     return getCrawlRecord(bookId);
+  }
+
+  async listCrawlRecords() {
+    return listCrawlRecords();
   }
 
   async deleteCrawlRecord(bookId) {

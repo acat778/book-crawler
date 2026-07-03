@@ -168,6 +168,33 @@ export async function getCrawlRecord(bookId) {
 }
 
 /**
+ * 获取全部爬取记录，按更新时间倒序返回。
+ * @returns {Promise<object[]>}
+ */
+export async function listCrawlRecords() {
+  await ensureDir();
+  const files = await fs.readdir(DATA_DIR);
+  const records = [];
+
+  for (const name of files) {
+    if (!name.endsWith('.json')) continue;
+
+    try {
+      const raw = await fs.readFile(path.join(DATA_DIR, name), 'utf-8');
+      records.push(JSON.parse(raw));
+    } catch (err) {
+      console.warn(`[CrawlTracker] 读取爬取记录失败: ${name} - ${err.message}`);
+    }
+  }
+
+  return records.sort((left, right) => {
+    const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime();
+    const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime();
+    return rightTime - leftTime;
+  });
+}
+
+/**
  * 删除爬取记录（用于重新爬取）
  * @param {string} bookId
  */

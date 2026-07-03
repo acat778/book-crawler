@@ -47,7 +47,36 @@ Content-Type: application/json
 }
 ```
 
-## 3. 爬取单个章节
+## 3. 查询爬取任务
+
+```
+GET /api/crawler/tasks
+```
+
+**说明**：读取本地 `data/crawls/` 中的爬取记录，按更新时间倒序返回，用于前端任务页展示。
+
+**响应**：
+```json
+{
+  "tasks": [
+    {
+      "bookId": "uuid",
+      "status": "completed",
+      "title": "赘婿",
+      "authorName": "愤怒的香蕉",
+      "url": "https://...",
+      "totalChapters": 100,
+      "crawledChapters": 100,
+      "failedChapters": 0,
+      "pendingChapters": 0,
+      "createdAt": "2026-07-03T12:00:00.000Z",
+      "updatedAt": "2026-07-03T12:30:00.000Z"
+    }
+  ]
+}
+```
+
+## 4. 爬取单个章节
 
 ```
 POST /api/crawler/crawl-chapter
@@ -56,7 +85,7 @@ Content-Type: application/json
 { "url": "https://...", "site": "69shuba" }
 ```
 
-## 4. 重新爬取
+## 5. 重新爬取
 
 ```
 POST /api/crawler/re-crawl
@@ -65,7 +94,7 @@ Content-Type: application/json
 { "bookId": "uuid", "url": "https://...", "site": "69shuba" }
 ```
 
-## 5. 查询爬取状态
+## 6. 查询爬取状态
 
 ```
 GET /api/crawler/status/{bookId}

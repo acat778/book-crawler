@@ -3,6 +3,28 @@ import { crawlerService } from '../services/crawler.js';
 
 const router = Router();
 
+function toTaskSummary(record) {
+  const chapters = Array.isArray(record.chapters) ? record.chapters : [];
+  const chapterLinks = Array.isArray(record.chapterLinks) ? record.chapterLinks : [];
+  const crawledCount = chapters.filter(ch => ch.status === 'crawled').length;
+  const failedCount = chapters.filter(ch => ch.status === 'failed').length;
+  const totalCount = chapterLinks.length;
+
+  return {
+    bookId: record.bookId,
+    status: record.status,
+    title: record.title,
+    authorName: record.authorName,
+    url: record.url,
+    totalChapters: totalCount,
+    crawledChapters: crawledCount,
+    failedChapters: failedCount,
+    pendingChapters: Math.max(0, totalCount - crawledCount - failedCount),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
 /**
  * GET /api/crawler/search
  * 站内搜索 / DuckDuckGo 站内搜索书籍
@@ -43,6 +65,20 @@ router.post('/crawl', async (req, res) => {
   } catch (err) {
     console.error('[API] /crawl 错误:', err.message);
     res.status(500).json({ error: '爬取失败: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/crawler/tasks
+ * 查询本地爬取任务记录。
+ */
+router.get('/tasks', async (_req, res) => {
+  try {
+    const records = await crawlerService.storage.listCrawlRecords();
+    res.json({ tasks: records.map(toTaskSummary) });
+  } catch (err) {
+    console.error('[API] /tasks 错误:', err.message);
+    res.status(500).json({ error: '查询任务失败: ' + err.message });
   }
 });
 
@@ -99,9 +135,9 @@ router.post('/re-crawl', async (req, res) => {
  */
 router.get('/status/:bookId', async (req, res) => {
   try {
-    const bookId = parseInt(req.params.bookId, 10);
-    if (isNaN(bookId)) {
-      return res.status(400).json({ error: 'bookId 必须是数字' });
+    const { bookId } = req.params;
+    if (!bookId || bookId.trim() === '') {
+      return res.status(400).json({ error: 'bookId 参数不能为空' });
     }
 
     const record = await crawlerService.storage.getCrawlRecord(bookId);
@@ -109,22 +145,9 @@ router.get('/status/:bookId', async (req, res) => {
       return res.json({ exists: false });
     }
 
-    const crawledCount = record.chapters ? record.chapters.filter(ch => ch.status === 'crawled').length : 0;
-    const failedCount = record.chapters ? record.chapters.filter(ch => ch.status === 'failed').length : 0;
-    const totalCount = record.chapter_links ? record.chapter_links.length : 0;
-    const pendingCount = Math.max(0, totalCount - crawledCount - failedCount);
-
     res.json({
       exists: true,
-      bookId: record._id,
-      status: record.status,
-      title: record.title,
-      authorName: record.author_name,
-      totalChapters: totalCount,
-      crawledChapters: crawledCount,
-      failedChapters: failedCount,
-      pendingChapters: pendingCount,
-      updatedAt: record.updated_at,
+      ...toTaskSummary(record),
     });
   } catch (err) {
     console.error('[API] /status 错误:', err.message);
