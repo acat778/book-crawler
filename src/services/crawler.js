@@ -1,9 +1,9 @@
 import * as cheerio from 'cheerio';
-import config from '../config.js';
-import { ApiClient } from './api-client.js';
 import { StorageService } from '../store/storage.js';
 import { fetchHtml, openPage } from './browser.js';
 import { getAdapter } from '../sites/registry.js';
+import { bookRepository } from '../persistence/book-repository.js';
+import config from '../config.js';
 
 /**
  * 爬虫服务 — 爬取书籍信息、目录和章节内容
@@ -25,7 +25,6 @@ export class CrawlerService {
 
   constructor() {
     this.storage = new StorageService(config.crawler.userId);
-    this.api = ApiClient.getInstance();
   }
 
   // ==================== 搜索 ====================
@@ -219,7 +218,7 @@ export class CrawlerService {
 
       // 标记为爬取中（本地文件 + WS 推送状态）
       await this.storage.setCrawlBookStatus(bookId, 'crawling');
-      this.api.reportTaskStatus(bookId, 'crawling', { total: chaptersToCrawl.length, title }).catch(() => {});
+      bookRepository.reportTaskStatus(bookId, 'crawling', { total: chaptersToCrawl.length, title }).catch(() => {});
       console.log(`[Crawler] 开始爬取 ${chaptersToCrawl.length} 个章节`);
 
       // 打开目录页（保留会话以绕过 Cloudflare）
@@ -257,7 +256,7 @@ export class CrawlerService {
 
       // ===== PHASE 5: 完成 =====
       await this.storage.setCrawlBookStatus(bookId, 'completed');
-      this.api.reportTaskStatus(bookId, 'completed', { crawled: savedCount, total: chaptersToCrawl.length, title }).catch(() => {});
+      bookRepository.reportTaskStatus(bookId, 'completed', { crawled: savedCount, total: chaptersToCrawl.length, title }).catch(() => {});
 
       console.log(`[Crawler] 爬取完成: bookId=${bookId}, saved=${savedCount}/${chaptersToCrawl.length}`);
       return {
@@ -276,7 +275,7 @@ export class CrawlerService {
       if (bookId) {
         try {
           await this.storage.setCrawlBookStatus(bookId, 'failed');
-          this.api.reportTaskStatus(bookId, 'failed', { error: err.message }).catch(() => {});
+          bookRepository.reportTaskStatus(bookId, 'failed', { error: err.message }).catch(() => {});
         } catch { /* ignore */ }
       }
       return { success: false, message: `爬取失败: ${err.message}` };

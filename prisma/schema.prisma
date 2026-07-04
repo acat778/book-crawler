@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model AcatUserAuthor {
+  id          String   @id @db.VarChar(36)
+  userId      String?  @map("user_id") @db.VarChar(36)
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  avatar      String?  @db.VarChar(36)
+  status      Int      @default(1) @db.TinyInt
+  isDeleted   Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy    String?  @map("create_by") @db.VarChar(36)
+  updateBy    String?  @map("update_by") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version     Int      @default(0)
+
+  books ReadBook[]
+
+  @@index([userId], map: "idx_user_id")
+  @@map("t_acat_user_author")
+}
+
+model ReadBook {
+  id            String   @id @db.VarChar(36)
+  title         String   @db.VarChar(200)
+  authorId      String   @map("author_id") @db.VarChar(36)
+  coverId       String?  @map("cover_id") @db.VarChar(36)
+  description   String?  @db.Text
+  category      String   @db.VarChar(50)
+  status        Int      @default(0) @db.TinyInt
+  wordCount     BigInt   @default(0) @map("word_count")
+  chapterCount  Int      @default(0) @map("chapter_count")
+  rating        Decimal  @default(0.0) @db.Decimal(2, 1)
+  reviewStatus  Int      @default(0) @map("review_status") @db.TinyInt
+  reviewComment String?  @map("review_comment") @db.VarChar(500)
+  isFeatured    Int      @default(0) @map("is_featured") @db.TinyInt
+  featuredOrder Int      @default(0) @map("featured_order")
+  frozen        Int      @default(0) @db.TinyInt
+  isAdult       Int      @default(0) @map("is_adult") @db.TinyInt
+  isDeleted     Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy      String?  @map("create_by") @db.VarChar(36)
+  updateBy      String?  @map("update_by") @db.VarChar(36)
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version       Int      @default(0)
+
+  author   AcatUserAuthor       @relation(fields: [authorId], references: [id])
+  chapters ReadBookChapter[]
+  tagRels  ReadBookTagRelation[]
+
+  @@map("t_read_book")
+}
+
+model ReadBookChapter {
+  id          String   @id @db.VarChar(36)
+  bookId      String   @map("book_id") @db.VarChar(36)
+  title       String   @db.VarChar(200)
+  wordCount   Int      @default(0) @map("word_count")
+  sortOrder   Int      @default(0) @map("sort_order")
+  status      Int      @default(0) @db.TinyInt
+  scheduledAt DateTime? @map("scheduled_at") @db.DateTime(0)
+  volumeId    String?  @map("volume_id") @db.VarChar(36)
+  frozen      Int      @default(0) @db.TinyInt
+  isDeleted   Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy    String?  @map("create_by") @db.VarChar(36)
+  updateBy    String?  @map("update_by") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version     Int      @default(0)
+
+  book ReadBook @relation(fields: [bookId], references: [id])
+
+  @@index([bookId], map: "idx_book_id")
+  @@index([volumeId], map: "idx_volume")
+  @@map("t_read_book_chapter")
+}
+
+model ReadBookTagRelation {
+  id        String   @id @db.VarChar(36)
+  bookId    String   @map("book_id") @db.VarChar(36)
+  tagId     String   @map("tag_id") @db.VarChar(36)
+  status    Int      @default(0) @db.TinyInt
+  isDeleted Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy  String?  @map("create_by") @db.VarChar(36)
+  updateBy  String?  @map("update_by") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version   Int      @default(0)
+
+  book ReadBook @relation(fields: [bookId], references: [id])
+
+  @@unique([bookId, tagId], map: "uk_book_tag")
+  @@index([bookId], map: "idx_book_id")
+  @@map("t_read_book_tag_relation")
+}
+
+model AcatDict {
+  id          String   @id @db.VarChar(36)
+  code        String   @db.VarChar(100)
+  name        String   @db.VarChar(200)
+  isEnabled   Int      @default(1) @map("is_enabled") @db.TinyInt
+  isTree      Int      @default(0) @map("is_tree") @db.TinyInt
+  scope       Int      @default(0) @db.TinyInt
+  description String?  @db.VarChar(500)
+  isDeleted   Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy    String?  @map("create_by") @db.VarChar(36)
+  updateBy    String?  @map("update_by") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version     Int      @default(0)
+
+  dataItems AcatDictData[]
+
+  @@unique([code, scope], map: "uk_dict_code_scope")
+  @@map("t_acat_dict")
+}
+
+model AcatDictData {
+  id          String   @id @db.VarChar(36)
+  dictId      String   @map("dict_id") @db.VarChar(36)
+  parentId    String?  @map("parent_id") @db.VarChar(36)
+  code        String   @db.VarChar(100)
+  name        String   @db.VarChar(200)
+  value       String   @db.VarChar(200)
+  sortOrder   Int      @default(0) @map("sort_order")
+  isEnabled   Int      @default(1) @map("is_enabled") @db.TinyInt
+  description String?  @db.VarChar(500)
+  isDeleted   Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy    String?  @map("create_by") @db.VarChar(36)
+  updateBy    String?  @map("update_by") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version     Int      @default(0)
+
+  dict AcatDict @relation(fields: [dictId], references: [id])
+
+  @@index([dictId], map: "idx_dict_id")
+  @@index([parentId], map: "idx_parent_id")
+  @@map("t_acat_dict_data")
+}
+
+model AcatFile {
+  id        String   @id @db.VarChar(36)
+  name      String   @db.VarChar(255)
+  path      String   @db.VarChar(500)
+  type      String   @db.VarChar(50)
+  size      BigInt   @default(0)
+  isDeleted Int      @default(0) @map("is_deleted") @db.TinyInt
+  createBy  String?  @map("create_by") @db.VarChar(36)
+  updateBy  String?  @map("update_by") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+  version   Int      @default(0)
+
+  @@map("t_acat_file")
+}

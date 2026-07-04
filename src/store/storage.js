@@ -7,9 +7,9 @@ import {
   deleteCrawlRecord,
   getCrawledChapterUrls,
 } from './crawl-tracker.js';
-import { ApiClient } from '../services/api-client.js';
+import { bookRepository } from '../persistence/book-repository.js';
 
-const COVER_FILE_ID = 0;
+const COVER_FILE_ID = '0';
 
 /**
  * 数据持久化服务（v5.0）
@@ -23,7 +23,6 @@ export class StorageService {
 
   constructor(userId) {
     this.userId = userId;
-    this.api = ApiClient.getInstance();
   }
 
   // ==================== 编码工具 ====================
@@ -37,13 +36,7 @@ export class StorageService {
   async findOrCreateAuthor(name) {
     if (!name || name.trim() === '') name = '佚名';
 
-    const found = await this.api.matchAuthor(name);
-    if (found) return found.id;
-
-    const created = await this.api.createCrawlerAuthor(name, '');
-    if (!created) throw new Error(`创建作者失败: ${name}`);
-    console.log(`[Storage] 新增作者: ${name} (id=${created.id})`);
-    return created.id;
+    return bookRepository.findOrCreateAuthor(name);
   }
 
   // ==================== 分类（REST — 低频） ====================
@@ -51,17 +44,7 @@ export class StorageService {
   async findOrCreateCategory(name) {
     if (!name || name.trim() === '') return null;
 
-    const found = await this.api.matchCategory(name);
-    if (found) return found.id;
-
-    const code = this.#dictCode(name);
-    const created = await this.api.createCrawlerCategory(name, code);
-    if (!created) {
-      console.warn(`[Storage] 创建分类失败: ${name}`);
-      return null;
-    }
-    console.log(`[Storage] 新增分类: ${name} (id=${created.id})`);
-    return created.id;
+    return bookRepository.findOrCreateCategory(name);
   }
 
   // ==================== 标签（REST — 低频） ====================
@@ -69,43 +52,20 @@ export class StorageService {
   async findOrCreateTag(name) {
     if (!name || name.trim() === '') return null;
 
-    const matched = await this.api.matchTags([name]);
-    if (matched.length > 0) return matched[0].id;
-
-    const code = this.#dictCode(name);
-    const created = await this.api.createCrawlerTag(name, code);
-    if (!created) {
-      console.warn(`[Storage] 创建标签失败: ${name}`);
-      return null;
-    }
-    console.log(`[Storage] 新增标签: ${name} (id=${created.id})`);
-    return created.id;
+    const matched = await bookRepository.findOrCreateTags([name]);
+    return matched[0]?.id || null;
   }
 
   async findOrCreateTags(names) {
     if (!names || names.length === 0) return [];
 
-    const matched = await this.api.matchTags(names);
-    const result = [...matched];
-    const matchedNames = new Set(matched.map(t => t.tag));
-
-    for (const name of names) {
-      if (!name || !name.trim() || matchedNames.has(name)) continue;
-      const code = this.#dictCode(name);
-      const created = await this.api.createCrawlerTag(name, code);
-      if (created) {
-        result.push({ tag: created.name, id: created.id });
-        console.log(`[Storage] 新增标签: ${name} (id=${created.id})`);
-      }
-    }
-
-    return result;
+    return bookRepository.findOrCreateTags(names);
   }
 
   // ==================== 书籍（REST — 需同步返回 bookId） ====================
 
   async findExistingBook(title, authorName) {
-    return this.api.matchBook(title, authorName);
+    return bookRepository.findExistingBook(title, authorName);
   }
 
   /**
@@ -129,8 +89,7 @@ export class StorageService {
       param.tagIds = bookData.tagIds;
     }
 
-    const result = await this.api.createCrawlerBook(param);
-    if (!result) throw new Error(`创建书籍失败: ${bookData.title}`);
+    const result = await bookRepository.createBook(param);
     console.log(`[Storage] 新增书籍: title=${bookData.title}, authorId=${bookData.authorId}, id=${result.id}`);
     return result;
   }
@@ -142,8 +101,7 @@ export class StorageService {
       return COVER_FILE_ID;
     }
     try {
-      const fileInfo = await this.api.uploadCover(imageUrl);
-      return fileInfo ? fileInfo.id : COVER_FILE_ID;
+      return await bookRepository.uploadCover(imageUrl);
     } catch (err) {
       console.warn(`[Storage] 封面上传失败: ${err.message}`);
       return COVER_FILE_ID;
@@ -159,9 +117,7 @@ export class StorageService {
   async createChapterWithContent(bookId, title, paragraphs) {
     if (!paragraphs || paragraphs.length === 0) {
       // 空内容 — 直接创建空章节
-      const result = await this.api.createChapter(bookId, title, '');
-      if (!result) throw new Error(`创建章节失败: ${title}`);
-      return result;
+      return bookRepository.createChapterWithContent(bookId, title, '');
     }
 
     const content = paragraphs.join('\n\n');
@@ -169,16 +125,14 @@ export class StorageService {
 
     if (jsonSize <= 400 * 1024) {
       // 内容适中 — 一步创建
-      const result = await this.api.createChapter(bookId, title, content);
-      if (!result) throw new Error(`创建章节失败: ${title}`);
+      const result = await bookRepository.createChapterWithContent(bookId, title, content);
       console.log(`[Storage] 创建章节: bookId=${bookId}, title=${title}, id=${result.id}, size=${(jsonSize / 1024).toFixed(1)}KB`);
       return result;
     }
 
     // 内容过大 — 先创建空章节，再分批追加段落
     console.log(`[Storage] 章节过大 (${(jsonSize / 1024).toFixed(1)}KB)，拆分发送: ${title}`);
-    const chapter = await this.api.createChapter(bookId, title, '');
-    if (!chapter) throw new Error(`创建章节失败: ${title}`);
+    const chapter = await bookRepository.createChapterWithContent(bookId, title, '');
 
     // 分批追加段落（每批最多 200KB）
     await this.#appendParagraphsInBatches(chapter.id, paragraphs);
@@ -189,9 +143,7 @@ export class StorageService {
    * 创建空章节（无内容 / 正文为空时回退）
    */
   async createChapter(bookId, title, sortOrder, wordCount = 0) {
-    const result = await this.api.createChapter(bookId, title, '');
-    if (!result) throw new Error(`创建章节失败: ${title}`);
-    return result;
+    return bookRepository.createChapterWithContent(bookId, title, '');
   }
 
   /**
@@ -229,7 +181,7 @@ export class StorageService {
     let total = 0;
     for (let i = 0; i < batches.length; i++) {
       try {
-        const count = await this.api.appendParagraphs(chapterId, batches[i]);
+        const count = await bookRepository.appendParagraphs(chapterId, batches[i]);
         total += count;
         if (batches.length > 1) {
           console.log(`[Storage] 追加段落 batch ${i + 1}/${batches.length}: chapterId=${chapterId}, count=${count}`);

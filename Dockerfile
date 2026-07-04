@@ -24,6 +24,8 @@ WORKDIR /app
 # 后端依赖 + 源码
 COPY node_modules ./node_modules
 COPY package.json .
+COPY prisma ./prisma
+RUN npx prisma generate
 COPY src ./src
 
 # 前端构建产物（CI 步骤编译）

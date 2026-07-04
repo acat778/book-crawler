@@ -3,7 +3,6 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import config from './config.js';
-import { ApiClient } from './services/api-client.js';
 import crawlerRoutes from './routes/crawler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,6 +16,7 @@ app.use(express.json());
 // ==================== API 路由 ====================
 
 app.use('/api/crawler', crawlerRoutes);
+app.use('/api/read/admin/crawler/book', crawlerRoutes);
 
 // ==================== 静态文件服务（生产环境） ====================
 
@@ -42,15 +42,6 @@ app.get('*', (req, res, next) => {
 // ==================== 启动服务器 ====================
 
 async function main() {
-  // 测试 API 连通性（登录）
-  try {
-    const api = ApiClient.getInstance();
-    await api.ensureToken();
-    console.log('[API] acat-book-book 网关连接成功');
-  } catch (err) {
-    console.warn('[API] acat-book-book 网关连接失败（部分功能可能不可用）:', err.message);
-  }
-
   const port = config.server.port;
 
   app.listen(port, () => {
@@ -58,7 +49,7 @@ async function main() {
     console.log(`  Book Crawler Server v2.0.0`);
     console.log(`  http://localhost:${port}`);
     console.log(`  API: http://localhost:${port}/api/crawler`);
-    console.log(`  Backend: ${config.api.baseUrl}`);
+    console.log(`  Persistence: Prisma + MongoDB + RustFS`);
     console.log(`========================================\n`);
   });
 }
