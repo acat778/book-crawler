@@ -87,7 +87,6 @@ async function syncBookToMongo(book) {
       $setOnInsert: {
         created_at: new Date(),
         create_by: CRAWLER_USER_ID,
-        chapters: [],
       },
       $set: doc,
     },
@@ -107,34 +106,34 @@ async function syncChapterToMongo({ bookId, chapter, content, replace = true }) 
     updated_at: new Date(),
     version: 0,
   }))
-  const embedded = {
-    _id: chapter.id,
-    title: chapter.title,
-    word_count: chapter.wordCount,
-    sort_order: chapter.sortOrder,
-    is_deleted: 0,
-    create_by: CRAWLER_USER_ID,
-    update_by: CRAWLER_USER_ID,
-    created_at: new Date(),
-    updated_at: new Date(),
-    version: 0,
-    paragraphs,
-  }
 
-  const collection = db.collection('books')
-  const existing = await collection.findOne({ _id: bookId, 'chapters._id': chapter.id })
-  if (existing && replace) {
-    await collection.updateOne({ _id: bookId, 'chapters._id': chapter.id }, { $set: { 'chapters.$': embedded } })
-    return paragraphs.length
-  }
-  if (!existing) {
-    await collection.updateOne({ _id: bookId }, { $push: { chapters: embedded } }, { upsert: true })
-    return paragraphs.length
-  }
-  await collection.updateOne(
-    { _id: bookId, 'chapters._id': chapter.id },
-    { $push: { 'chapters.$.paragraphs': { $each: paragraphs } } },
+  // 写入独立 chapters 集合 — 不再嵌入 books 集合，
+  // 避免单本书文档超过 MongoDB 16MB BSON 限制
+  await db.collection('chapters').updateOne(
+    { _id: chapter.id },
+    {
+      $set: {
+        book_id: bookId,
+        title: chapter.title,
+        word_count: chapter.wordCount,
+        sort_order: chapter.sortOrder,
+        is_deleted: 0,
+        create_by: CRAWLER_USER_ID,
+        update_by: CRAWLER_USER_ID,
+        updated_at: new Date(),
+        created_at: new Date(),
+        version: 0,
+        paragraphs,
+      },
+    },
+    { upsert: true },
   )
+
+  // 在 book_id 上建索引（首次调用时）
+  try {
+    await db.collection('chapters').createIndex({ book_id: 1 }, { background: true })
+  } catch (_) { /* 索引已存在 */ }
+
   return paragraphs.length
 }
 

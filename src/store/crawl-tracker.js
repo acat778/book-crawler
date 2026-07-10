@@ -221,3 +221,12 @@ export async function getCrawledChapterUrls(bookId) {
       .map(ch => ch.url),
   );
 }
+
+/**
+ * 直接写入爬取记录（用于重试等场景的内部方法）
+ * @param {string} bookId
+ * @param {object} data
+ */
+export async function writeCrawlRecord(bookId, data) {
+  await writeRecord(bookId, data);
+}

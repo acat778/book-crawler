@@ -6,6 +6,7 @@ import {
   listCrawlRecords,
   deleteCrawlRecord,
   getCrawledChapterUrls,
+  writeCrawlRecord,
 } from './crawl-tracker.js';
 import { bookRepository } from '../persistence/book-repository.js';
 
@@ -225,5 +226,9 @@ export class StorageService {
 
   async getCrawledChapterUrls(bookId) {
     return getCrawledChapterUrls(bookId);
+  }
+
+  async writeCrawlRecord(bookId, data) {
+    return writeCrawlRecord(bookId, data);
   }
 }
