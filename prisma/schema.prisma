@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model AcatUserAuthor {
+model ReadBookAuthor {
   id          String   @id @db.VarChar(36)
   userId      String?  @map("user_id") @db.VarChar(36)
   name        String   @unique @db.VarChar(100)
@@ -24,7 +24,7 @@ model AcatUserAuthor {
   books ReadBook[]
 
   @@index([userId], map: "idx_user_id")
-  @@map("t_acat_user_author")
+  @@map("t_read_book_author")
 }
 
 model ReadBook {
@@ -51,7 +51,7 @@ model ReadBook {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(0)
   version       Int      @default(0)
 
-  author   AcatUserAuthor       @relation(fields: [authorId], references: [id])
+  author   ReadBookAuthor       @relation(fields: [authorId], references: [id])
   chapters ReadBookChapter[]
   tagRels  ReadBookTagRelation[]
 
@@ -151,6 +151,7 @@ model AcatFile {
   name      String   @db.VarChar(255)
   path      String   @db.VarChar(500)
   type      String   @db.VarChar(50)
+  fileType  String   @default("other") @map("file_type") @db.VarChar(32)
   size      BigInt   @default(0)
   isDeleted Int      @default(0) @map("is_deleted") @db.TinyInt
   createBy  String?  @map("create_by") @db.VarChar(36)

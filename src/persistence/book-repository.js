@@ -152,9 +152,9 @@ async function updateBookStats(bookId) {
 export const bookRepository = {
   async findOrCreateAuthor(name) {
     const normalized = name?.trim() || '佚名'
-    const existing = await prisma.acatUserAuthor.findFirst({ where: { name: normalized, isDeleted: 0 } })
+    const existing = await prisma.readBookAuthor.findFirst({ where: { name: normalized, isDeleted: 0 } })
     if (existing) return existing.id
-    const created = await prisma.acatUserAuthor.create({
+    const created = await prisma.readBookAuthor.create({
       data: {
         id: nowId(),
         name: normalized,
@@ -184,7 +184,7 @@ export const bookRepository = {
   },
 
   async findExistingBook(title, authorName) {
-    const author = await prisma.acatUserAuthor.findFirst({ where: { name: authorName, isDeleted: 0 } })
+    const author = await prisma.readBookAuthor.findFirst({ where: { name: authorName, isDeleted: 0 } })
     if (!author) return null
     const book = await prisma.readBook.findFirst({ where: { title, authorId: author.id, isDeleted: 0 } })
     return book ? { id: book.id, title: book.title, authorId: book.authorId } : null
@@ -240,6 +240,7 @@ export const bookRepository = {
         name: fileName,
         path: `${config.storage.bucket}/${objectName}`,
         type: contentType,
+        fileType: 'book_cover',
         size: BigInt(body.length),
         createBy: CRAWLER_USER_ID,
         updateBy: CRAWLER_USER_ID,

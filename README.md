@@ -173,12 +173,10 @@ POST /api/crawler/crawl-chapter?url={章节URL}
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | `8609` | 服务端口 |
-| `API_BASE_URL` | `http://localhost:9000` | API 网关地址（REST 调用） |
-| `CRAWLER_API_BASE_URL` | 同 `API_BASE_URL` | Crawler API 地址（默认同网关） |
-| `API_TIMEOUT` | `30000` | HTTP 请求超时 ms |
-| `CRAWLER_USERNAME` | `crawler` | 后端登录用户名 |
-| `CRAWLER_PASSWORD` | `123456` | 后端登录密码 |
-| `CRAWLER_USER_ID` | `4` | 爬虫用户 ID |
+| `DATABASE_URL` | — | Prisma MySQL 连接串 |
+| `MONGO_URI` | — | MongoDB 连接串 |
+| `RUSTFS_ENDPOINT` | `http://localhost:9002` | RustFS/S3 地址 |
+| `RUSTFS_BUCKET` | `acat-book` | 小说文件 Bucket |
 | `GOOGLE_SEARCH_URL` | `https://www.google.com/search` | Google 搜索地址 |
 
 ## 部署
@@ -194,8 +192,8 @@ docker build -t book-crawler:latest .
 docker run -d --name book-crawler --network host --restart unless-stopped \
   -v /opt/book-crawler-data:/app/data \
   -e NODE_ENV=production -e PORT=8609 \
-  -e API_BASE_URL=http://localhost:9000 -e API_TIMEOUT=30000 \
-  -e CRAWLER_USERNAME=crawler -e CRAWLER_PASSWORD=123456 \
+  -e DATABASE_URL=mysql://root:123456@127.0.0.1:3306/acat_dev \
+  -e MONGO_URI=mongodb://127.0.0.1:27017/acat_dev \
   book-crawler:latest
 ```
 

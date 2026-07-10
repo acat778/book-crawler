@@ -9,6 +9,7 @@
     "dev:frontend": "cd frontend && npm run dev",
     "dev:all": "node -e \"const{spawn}=require('child_process');spawn('node',['--watch','src/server.js'],{stdio:'inherit',shell:true});spawn('npm',['run','dev'],{cwd:'frontend',stdio:'inherit',shell:true})\"",
     "start": "node src/server.js",
+    "test": "node test/schema-sync.test.js",
     "build:frontend": "cd frontend && npm run build"
   },
   "dependencies": {
