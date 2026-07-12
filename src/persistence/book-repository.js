@@ -94,38 +94,55 @@ async function syncBookToMongo(book) {
   )
 }
 
-async function syncChapterToMongo({ bookId, chapter, content, replace = true }) {
-  const db = await getMongoDb()
+export async function syncChapterDocument({
+  db,
+  bookId,
+  chapter,
+  content,
+  replace = true,
+  idFactory = nowId,
+  clock = () => new Date(),
+}) {
+  const now = clock()
   const paragraphs = splitParagraphs(content).map((part) => ({
-    _id: nowId(),
+    _id: idFactory(),
     content: part,
     is_deleted: 0,
     create_by: CRAWLER_USER_ID,
     update_by: CRAWLER_USER_ID,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: now,
+    updated_at: now,
     version: 0,
   }))
 
   // 写入独立 chapters 集合 — 不再嵌入 books 集合，
   // 避免单本书文档超过 MongoDB 16MB BSON 限制
+  const update = {
+    $setOnInsert: {
+      create_by: CRAWLER_USER_ID,
+      created_at: now,
+      version: 0,
+    },
+    $set: {
+      book_id: bookId,
+      title: chapter.title,
+      sort_order: chapter.sortOrder,
+      is_deleted: 0,
+      update_by: CRAWLER_USER_ID,
+      updated_at: now,
+    },
+  }
+  if (replace) {
+    update.$set.word_count = chapter.wordCount
+    update.$set.paragraphs = paragraphs
+  } else {
+    update.$inc = { word_count: wordCount(content) }
+    update.$push = { paragraphs: { $each: paragraphs } }
+  }
+
   await db.collection('chapters').updateOne(
     { _id: chapter.id },
-    {
-      $set: {
-        book_id: bookId,
-        title: chapter.title,
-        word_count: chapter.wordCount,
-        sort_order: chapter.sortOrder,
-        is_deleted: 0,
-        create_by: CRAWLER_USER_ID,
-        update_by: CRAWLER_USER_ID,
-        updated_at: new Date(),
-        created_at: new Date(),
-        version: 0,
-        paragraphs,
-      },
-    },
+    update,
     { upsert: true },
   )
 
@@ -135,6 +152,11 @@ async function syncChapterToMongo({ bookId, chapter, content, replace = true }) 
   } catch (_) { /* 索引已存在 */ }
 
   return paragraphs.length
+}
+
+async function syncChapterToMongo(args) {
+  const db = await getMongoDb()
+  return syncChapterDocument({ db, ...args })
 }
 
 async function updateBookStats(bookId) {
@@ -250,6 +272,26 @@ export const bookRepository = {
   },
 
   async createChapterWithContent(bookId, title, content) {
+    const existing = await prisma.readBookChapter.findFirst({
+      where: { bookId, title, isDeleted: 0 },
+    })
+    if (existing) {
+      let chapter = existing
+      if (content) {
+        chapter = await prisma.readBookChapter.update({
+          where: { id: existing.id },
+          data: {
+            wordCount: wordCount(content),
+            status: 1,
+            updateBy: CRAWLER_USER_ID,
+          },
+        })
+        await syncChapterToMongo({ bookId, chapter, content, replace: true })
+      }
+      await updateBookStats(bookId)
+      return { id: chapter.id, title: chapter.title, sortOrder: chapter.sortOrder }
+    }
+
     const max = await prisma.readBookChapter.aggregate({
       where: { bookId, isDeleted: 0 },
       _max: { sortOrder: true },

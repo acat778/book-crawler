@@ -15,15 +15,16 @@ const COVER_FILE_ID = '0';
 /**
  * 数据持久化服务（v5.0）
  *
- * - 书籍元数据操作（作者/分类/标签/书籍）通过 REST API（低频，需要同步返回 ID）
- * - 章节创建/段落追加通过 REST API（可靠持久化到后端数据库）
- * - 封面图片上传通过 REST（multipart/form-data）
+ * - 书籍元数据和章节元数据通过 Prisma 直写 MySQL
+ * - 章节正文通过 MongoDB Driver 写入 MongoDB
+ * - 封面图片通过 S3 SDK 写入 RustFS
  * - 爬取状态通过本地文件追踪（data/crawls/）
  */
 export class StorageService {
 
-  constructor(userId) {
+  constructor(userId, repository = bookRepository) {
     this.userId = userId;
+    this.repository = repository;
   }
 
   // ==================== 编码工具 ====================
@@ -32,46 +33,45 @@ export class StorageService {
     return name.toLowerCase().replace(/[^a-z0-9一-鿿]/g, '_').replace(/_+/g, '_');
   }
 
-  // ==================== 作者（REST — 低频，需同步返回 ID） ====================
+  // ==================== 作者 ====================
 
   async findOrCreateAuthor(name) {
     if (!name || name.trim() === '') name = '佚名';
 
-    return bookRepository.findOrCreateAuthor(name);
+    return this.repository.findOrCreateAuthor(name);
   }
 
-  // ==================== 分类（REST — 低频） ====================
+  // ==================== 分类 ====================
 
   async findOrCreateCategory(name) {
     if (!name || name.trim() === '') return null;
 
-    return bookRepository.findOrCreateCategory(name);
+    return this.repository.findOrCreateCategory(name);
   }
 
-  // ==================== 标签（REST — 低频） ====================
+  // ==================== 标签 ====================
 
   async findOrCreateTag(name) {
     if (!name || name.trim() === '') return null;
 
-    const matched = await bookRepository.findOrCreateTags([name]);
+    const matched = await this.repository.findOrCreateTags([name]);
     return matched[0]?.id || null;
   }
 
   async findOrCreateTags(names) {
     if (!names || names.length === 0) return [];
 
-    return bookRepository.findOrCreateTags(names);
+    return this.repository.findOrCreateTags(names);
   }
 
-  // ==================== 书籍（REST — 需同步返回 bookId） ====================
+  // ==================== 书籍 ====================
 
   async findExistingBook(title, authorName) {
-    return bookRepository.findExistingBook(title, authorName);
+    return this.repository.findExistingBook(title, authorName);
   }
 
   /**
-   * 通过 crawler REST API 创建书籍（含标签关联，服务器分配 ID）
-   * POST /api/book/crawler/books
+   * 创建书籍并写入标签关联。
    */
   async createBook(bookData) {
     const param = {
@@ -90,35 +90,35 @@ export class StorageService {
       param.tagIds = bookData.tagIds;
     }
 
-    const result = await bookRepository.createBook(param);
+    const result = await this.repository.createBook(param);
     console.log(`[Storage] 新增书籍: title=${bookData.title}, authorId=${bookData.authorId}, id=${result.id}`);
     return result;
   }
 
-  // ==================== 封面上传（REST — multipart/form-data） ====================
+  // ==================== 封面上传 ====================
 
   async uploadCover(imageUrl) {
     if (!imageUrl || imageUrl.includes('nocover')) {
       return COVER_FILE_ID;
     }
     try {
-      return await bookRepository.uploadCover(imageUrl);
+      return await this.repository.uploadCover(imageUrl);
     } catch (err) {
       console.warn(`[Storage] 封面上传失败: ${err.message}`);
       return COVER_FILE_ID;
     }
   }
 
-  // ==================== 章节（REST API — 可靠持久化，大内容自动拆分） ====================
+  // ==================== 章节（大内容自动拆分） ====================
 
   /**
    * 创建章节（含内容），大内容自动拆分为多次追加
-   * REST API 保证数据可靠写入后端数据库。
+   * 分批写入失败时向上抛错，避免任务误报成功。
    */
   async createChapterWithContent(bookId, title, paragraphs) {
     if (!paragraphs || paragraphs.length === 0) {
       // 空内容 — 直接创建空章节
-      return bookRepository.createChapterWithContent(bookId, title, '');
+      return this.repository.createChapterWithContent(bookId, title, '');
     }
 
     const content = paragraphs.join('\n\n');
@@ -126,14 +126,14 @@ export class StorageService {
 
     if (jsonSize <= 400 * 1024) {
       // 内容适中 — 一步创建
-      const result = await bookRepository.createChapterWithContent(bookId, title, content);
+      const result = await this.repository.createChapterWithContent(bookId, title, content);
       console.log(`[Storage] 创建章节: bookId=${bookId}, title=${title}, id=${result.id}, size=${(jsonSize / 1024).toFixed(1)}KB`);
       return result;
     }
 
     // 内容过大 — 先创建空章节，再分批追加段落
     console.log(`[Storage] 章节过大 (${(jsonSize / 1024).toFixed(1)}KB)，拆分发送: ${title}`);
-    const chapter = await bookRepository.createChapterWithContent(bookId, title, '');
+    const chapter = await this.repository.createChapterWithContent(bookId, title, '');
 
     // 分批追加段落（每批最多 200KB）
     await this.#appendParagraphsInBatches(chapter.id, paragraphs);
@@ -144,7 +144,7 @@ export class StorageService {
    * 创建空章节（无内容 / 正文为空时回退）
    */
   async createChapter(bookId, title, sortOrder, wordCount = 0) {
-    return bookRepository.createChapterWithContent(bookId, title, '');
+    return this.repository.createChapterWithContent(bookId, title, '');
   }
 
   /**
@@ -182,13 +182,16 @@ export class StorageService {
     let total = 0;
     for (let i = 0; i < batches.length; i++) {
       try {
-        const count = await bookRepository.appendParagraphs(chapterId, batches[i]);
+        const count = await this.repository.appendParagraphs(chapterId, batches[i]);
         total += count;
         if (batches.length > 1) {
           console.log(`[Storage] 追加段落 batch ${i + 1}/${batches.length}: chapterId=${chapterId}, count=${count}`);
         }
       } catch (err) {
-        console.warn(`[Storage] 追加段落 batch ${i + 1}/${batches.length} 失败: ${err.message}`);
+        throw new Error(
+          `追加段落 batch ${i + 1}/${batches.length} 失败: ${err.message}`,
+          { cause: err },
+        );
       }
     }
     return total;

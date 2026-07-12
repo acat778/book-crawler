@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { crawlerService } from '../services/crawler.js';
+import { listSites } from '../sites/registry.js';
 
 const router = Router();
+
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok', adapters: listSites().map(({ id }) => id) });
+});
 
 function toTaskSummary(record) {
   const chapters = Array.isArray(record.chapters) ? record.chapters : [];

@@ -18,7 +18,8 @@ import config from '../config.js';
  * 5. 逐章爬取并写入
  *
  * 持久化策略：
- * - 所有元数据（作者/分类/标签/书籍/章节/段落）通过 REST API 操作
+ * - 元数据通过 Prisma 直写 MySQL，正文通过 MongoDB Driver 写入 MongoDB
+ * - 封面通过 S3 SDK 写入 RustFS
  * - 爬取状态通过本地 JSON 文件追踪
  */
 export class CrawlerService {
@@ -99,7 +100,7 @@ export class CrawlerService {
         if (categoryName) {
           categoryId = await this.storage.findOrCreateCategory(categoryName) || '';
         }
-        // 批量查找或创建标签（crawler API 批量 match + 逐个 create）
+        // 批量查找或创建标签
         const nonCategoryTags = tags.filter(t => t !== categoryName);
         const matchedTags = await this.storage.findOrCreateTags(nonCategoryTags);
         for (const { id } of matchedTags) {
@@ -235,7 +236,7 @@ export class CrawlerService {
           if (paragraphs.length > 0) {
             const wordCount = paragraphs.reduce((sum, p) => sum + p.length, 0);
 
-            // 4b. 通过 crawler API 创建章节并同步内容（含 \\n\\n 分段，一步完成）
+            // 4b. 创建章节并同步内容（含 \\n\\n 分段，一步完成）
             const chapter = await this.storage.createChapterWithContent(bookId, chapterTitle, paragraphs);
             await this.storage.recordCrawledChapter(bookId, chapter.id, chapterTitle, chapterUrl, chapter.sortOrder, wordCount);
             savedCount++;
