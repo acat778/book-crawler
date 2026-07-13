@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import config from '../config.js';
-import { fetchHtml, fetchHtmlLight } from '../services/browser.js';
+import { fetchHtml, fetchHtmlLight, fetchHtmlLightWithMeta } from '../services/browser.js';
 import { SiteAdapter } from './SiteAdapter.js';
 
 const BASE_URL = 'https://www.69shuba.com';
@@ -409,62 +409,41 @@ export class Site69shuba extends SiteAdapter {
   // ==================== 搜索 ====================
 
   async search(keyword, pageNum = 0) {
-    const { getBrowser } = await import('../services/browser.js');
-    const browser = await getBrowser();
-    if (!browser) {
-      console.error('[Search] 无可用浏览器，无法搜索');
-      return { results: [], hasMore: false };
-    }
-
-    // 策略1: DuckDuckGo 站内搜索
-    {
-      const result = await this.#ddgSearch(keyword, pageNum);
-      if (result.results.length > 0) return result;
-    }
-
-    // 策略2: 分类页浏览（仅第一页）
-    if (pageNum === 0) {
-      const result = await this.#browseCategory(keyword);
-      if (result.results.length > 0) return result;
-    }
-
-    console.log(`[Search] 所有策略均未返回结果 (keyword=${keyword})`);
-    return { results: [], hasMore: false };
-  }
-
-  // ==================== DuckDuckGo 搜索 ====================
-
-  async #ddgSearch(keyword, pageNum = 0) {
-    const offset = pageNum * 30;
+    const deadline = Date.now() + 12000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     const query = `site:69shuba.com ${keyword}`;
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&s=${offset}`;
-
-    console.log(`[Search] DuckDuckGo: q=${query} offset=${offset}`);
-
-    // 策略1: 轻量 HTTP（快，DDG HTML 端点不需要 JS）
-    let html = await fetchHtmlLight(url, { timeout: 15000 });
-    if (html && !html.includes('rate limit') && !html.includes('captcha') && html.length > 1000) {
-      const result = this.#parseDdgResponse(html);
-      if (result.results.length > 0) {
-        console.log(`[Search] DuckDuckGo HTTP 返回 ${result.results.length} 条结果`);
-        return result;
+    const offset = pageNum * 30;
+    const urls = [
+      ['site_69shuba', BASE_URL],
+      ['duckduckgo_html', `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&s=${offset}`],
+      ['duckduckgo_lite', `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}&s=${offset}`],
+    ];
+    try {
+      const settled = await Promise.all(urls.map(async ([source, url]) => {
+        const remaining = Math.max(1, deadline - Date.now());
+        const response = await fetchHtmlLightWithMeta(url, { timeout: remaining, signal: controller.signal });
+        if (response.status === 403) return { source, failure: { source, category: 'site_restricted' } };
+        if (response.status === 202 || /just a moment|challenge|captcha/i.test(response.body)) return { source, failure: { source, category: 'challenge' } };
+        if (!response.status || response.status >= 500) return { source, failure: { source, category: response.error ? 'timeout' : 'abnormal_response' } };
+        if (source === 'site_69shuba') return { source, failure: { source, category: 'abnormal_response' } };
+        const parsed = this.#parseDdgResponse(response.body);
+        return { source, ...parsed, outcome: parsed.results.length ? 'results' : 'empty' };
+      }));
+      const successes = settled.filter((item) => item.outcome === 'results');
+      const results = [];
+      const seen = new Set();
+      for (const item of successes.sort((a, b) => urls.findIndex(([s]) => s === a.source) - urls.findIndex(([s]) => s === b.source))) {
+        for (const result of item.results) if (!seen.has(result.url)) { seen.add(result.url); results.push(result); }
       }
-    }
-
-    // 策略2: Puppeteer 浏览器
-    if (html) {
-      console.warn('[Search] DuckDuckGo HTTP 被限流或无结果，回退 Puppeteer');
-    }
-    html = await fetchHtml(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
-    });
-    if (!html || html.length < 500) {
-      console.warn(`[Search] DuckDuckGo Puppeteer 失败`);
-      return { results: [], hasMore: false };
-    }
-
-    return this.#parseDdgResponse(html);
+      if (results.length) return { outcome: 'results', results: results.slice(0, 30), hasMore: successes.some((item) => item.hasMore), failures: [] };
+      const failures = settled.filter((item) => item.failure).map((item) => item.failure);
+      return failures.length === settled.length
+        ? { outcome: 'unavailable', results: [], hasMore: false, failures }
+        : { outcome: 'empty', results: [], hasMore: false, failures: [] };
+    } catch (err) {
+      return { outcome: 'unavailable', results: [], hasMore: false, failures: [{ source: 'duckduckgo_html', category: err.name === 'AbortError' ? 'timeout' : 'abnormal_response' }] };
+    } finally { clearTimeout(timer); }
   }
 
   #parseDdgResponse(html) {
@@ -475,7 +454,7 @@ export class Site69shuba extends SiteAdapter {
       return { results: results.slice(0, 30), hasMore };
     } catch (err) {
       console.warn(`[Search] DuckDuckGo 解析失败: ${err.message}`);
-      return { results: [], hasMore: false };
+      return { results: [], hasMore: false, failure: { source: 'DuckDuckGo HTML', category: 'abnormal_response' } };
     }
   }
 
@@ -669,7 +648,7 @@ export class Site69shuba extends SiteAdapter {
       }
     }
 
-    return { results: [], hasMore: false };
+    return { results: [], hasMore: false, failure: { source: '69书吧', category: 'abnormal_response' } };
   }
 
   #matchKeyword(title, keyword) {

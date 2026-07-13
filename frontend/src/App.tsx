@@ -17,6 +17,8 @@ interface SearchResult {
 interface SearchResponse {
   results: SearchResult[];
   hasMore: boolean;
+  outcome?: 'results' | 'empty' | 'unavailable';
+  failures?: { source: string; category: string }[];
 }
 
 interface CrawlResult {
@@ -80,6 +82,8 @@ export default function App() {
   const [crawling, setCrawling] = useState<string | null>(null);
   const [crawlResults, setCrawlResults] = useState<Record<string, CrawlResult>>({});
   const [error, setError] = useState('');
+  const [searchOutcome, setSearchOutcome] = useState<'ready' | 'results' | 'empty' | 'unavailable' | 'error'>('ready');
+  const [failures, setFailures] = useState<{ source: string; category: string }[]>([]);
   const [selectedSite, setSelectedSite] = useState<SiteId>('69shuba');
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -110,15 +114,23 @@ export default function App() {
     if (!keyword.trim()) return;
     setSearching(true);
     setError('');
+    setSearchOutcome('ready');
+    setFailures([]);
+    setResults([]);
     setCurrentPage(page);
     try {
       const res = await fetch(`${API}/search?keyword=${encodeURIComponent(keyword)}&page=${page}&site=${selectedSite}`);
       const data: SearchResponse = await res.json();
+      if (res.status === 503 || data.outcome === 'unavailable') {
+        setSearchOutcome('unavailable'); setFailures(data.failures || []); return;
+      }
       setResults(data.results);
       setHasMore(data.hasMore);
+      setSearchOutcome(data.outcome || (data.results.length ? 'results' : 'empty'));
     } catch (err) {
       console.error('[BookCrawler] 搜索失败:', err);
       setError('搜索失败');
+      setSearchOutcome('error');
     } finally {
       setSearching(false);
     }
@@ -223,7 +235,9 @@ export default function App() {
               </button>
             </div>
 
-            {error && <div style={{ color: 'red', marginBottom: 16 }}>{error}</div>}
+            {error && <div role="alert" style={{ color: 'red', marginBottom: 16 }}>搜索失败，请稍后重试</div>}
+            {searchOutcome === 'unavailable' && <div role="alert" style={{ color: '#a8071a', marginTop: 60, textAlign: 'center' }}><div>搜索不可用</div>{failures.map((f, i) => <div key={`${f.source}-${f.category}-${i}`}>来源：{({site_restricted:'69书吧受限', challenge:'搜索来源触发验证', timeout:'搜索来源超时', abnormal_response:'搜索来源响应异常'} as Record<string,string>)[f.category] || '搜索来源响应异常'}</div>)}</div>}
+            {searchOutcome === 'empty' && !searching && <div role="status" style={{ textAlign: 'center', color: '#999', marginTop: 60 }}>未找到匹配的书籍</div>}
 
             {results.length > 0 && (
               <div>
@@ -322,7 +336,7 @@ export default function App() {
               </div>
             )}
 
-            {results.length === 0 && !searching && (
+            {results.length === 0 && !searching && searchOutcome === 'ready' && (
               <div style={{ textAlign: 'center', color: '#999', marginTop: 60 }}>
                 输入关键词搜索书籍
               </div>

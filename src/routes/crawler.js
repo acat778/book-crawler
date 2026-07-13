@@ -44,8 +44,10 @@ router.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'keyword 参数不能为空' });
     }
 
-    const { results, hasMore } = await crawlerService.search(keyword.trim(), parseInt(page, 10) || 0, site);
-    res.json({ results, hasMore });
+    const result = await crawlerService.search(keyword.trim(), parseInt(page, 10) || 0, site);
+    const { results = [], hasMore = false, outcome = results.length ? 'results' : 'empty', failures = [] } = result;
+    if (outcome === 'unavailable') return res.status(503).json({ outcome, results: [], hasMore: false, error: { code: 'SEARCH_UNAVAILABLE', message: '搜索不可用' }, failures });
+    res.json({ outcome, results, hasMore });
   } catch (err) {
     console.error('[API] /search 错误:', err.message);
     res.status(500).json({ error: '搜索失败: ' + err.message });

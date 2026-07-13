@@ -179,6 +179,29 @@ export async function fetchHtmlLight(url, opts = {}) {
   }
 }
 
+/** 返回 HTTP 元数据；调用方需要区分 challenge/受限与真实空响应时使用。 */
+export async function fetchHtmlLightWithMeta(url, opts = {}) {
+  const { timeout = 15000, headers: extraHeaders = {}, signal } = opts;
+  try {
+    const axios = await import('axios');
+    const resp = await axios.default.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        ...extraHeaders,
+      },
+      timeout,
+      signal,
+      validateStatus: () => true,
+    });
+    return { status: resp.status, body: typeof resp.data === 'string' ? resp.data : '' };
+  } catch (err) {
+    if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') throw err;
+    return { status: 0, body: '', error: err };
+  }
+}
+
 /**
  * 使用 Puppeteer 获取页面 HTML（重量级，用于需要 JS 渲染 / Cloudflare 绕过的场景）
  * @param {string} url - 页面 URL

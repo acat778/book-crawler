@@ -14,15 +14,30 @@ GET /api/crawler/search?keyword={关键词}&page={页码}&site={站点}
 | page | number | 否 | 0 | 页码，从 0 开始 |
 | site | string | 否 | 69shuba | 站点标识（69shuba / alicesw） |
 
-**响应**：
+**成功响应（HTTP 200）**：`outcome` 只有 `results` 或 `empty`。`results` 表示至少一个来源返回通过 URL/标题校验的结果；`empty` 表示至少一个来源正常完成但没有匹配。来源按 HTML 后 Lite 合并并以 canonical URL 去重。
 ```json
 {
+  "outcome": "results",
   "results": [
     { "title": "赘婿", "url": "https://...", "snippet": "简介..." }
   ],
   "hasMore": true
 }
 ```
+
+**搜索不可用（HTTP 503）**：所有来源均失败时返回，不得当作成功空结果。请求总截止时间为 12 秒；69 书吧直连仅用于受限探测，不绕过 Cloudflare/challenge。
+
+```json
+{
+  "outcome": "unavailable",
+  "results": [],
+  "hasMore": false,
+  "error": { "code": "SEARCH_UNAVAILABLE", "message": "搜索不可用" },
+  "failures": [{ "source": "duckduckgo_html", "category": "challenge" }]
+}
+```
+
+`category` 仅为 `site_restricted`、`challenge`、`timeout`、`abnormal_response`；响应和日志不包含 Cookie、token 或外部正文。参数校验失败仍为 HTTP 400，内部合同错误为脱敏 HTTP 500。
 
 ## 2. 爬取书籍
 
