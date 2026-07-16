@@ -43,6 +43,7 @@ model ReadBook {
   isFeatured    Int      @default(0) @map("is_featured") @db.TinyInt
   featuredOrder Int      @default(0) @map("featured_order")
   frozen        Int      @default(0) @db.TinyInt
+  shelfStatus   Int      @default(0) @map("shelf_status") @db.TinyInt
   isAdult       Int      @default(0) @map("is_adult") @db.TinyInt
   isDeleted     Int      @default(0) @map("is_deleted") @db.TinyInt
   createBy      String?  @map("create_by") @db.VarChar(36)

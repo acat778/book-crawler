@@ -121,6 +121,7 @@ export async function syncChapterDocument({
     created_at: now,
     updated_at: now,
     version: 0,
+    history: [],
   }))
 
   // 写入独立 chapters 集合 — 不再嵌入 books 集合，
@@ -238,6 +239,7 @@ export const bookRepository = {
         isAdult: bookData.isAdult ? 1 : 0,
         reviewStatus: 1,
         frozen: 0,
+        shelfStatus: 1,
         wordCount: 0,
         chapterCount: 0,
         createBy: CRAWLER_USER_ID,

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { crawlerService } from '../services/crawler.js';
 import { listSites } from '../sites/registry.js';
+import { listTaskLogs } from '../persistence/task-log-repository.js';
+import { subscribeTaskEvents, subscribeTaskLogs } from '../realtime/task-events.js';
 
 const router = Router();
 
@@ -9,6 +11,7 @@ router.get('/health', (_req, res) => {
 });
 
 function toTaskSummary(record) {
+  if (record.totalChapters != null) return record;
   const chapters = Array.isArray(record.chapters) ? record.chapters : [];
   const chapterLinks = Array.isArray(record.chapterLinks) ? record.chapterLinks : [];
   const crawledCount = chapters.filter(ch => ch.status === 'crawled').length;
@@ -28,6 +31,16 @@ function toTaskSummary(record) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+function openEventStream(req, res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  res.write(': connected\n\n');
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 25_000);
+  return (unsubscribe) => req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
 }
 
 /**
@@ -87,6 +100,24 @@ router.get('/tasks', async (_req, res) => {
     console.error('[API] /tasks 错误:', err.message);
     res.status(500).json({ error: '查询任务失败: ' + err.message });
   }
+});
+
+router.get('/events', (req, res) => {
+  const closeWith = openEventStream(req, res);
+  closeWith(subscribeTaskEvents((event) => res.write(`data: ${JSON.stringify(event)}\n\n`)));
+});
+
+router.get('/tasks/:bookId/logs', async (req, res) => {
+  try {
+    res.json(await listTaskLogs(req.params.bookId, req.query));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/tasks/:bookId/logs/stream', (req, res) => {
+  const closeWith = openEventStream(req, res);
+  closeWith(subscribeTaskLogs(req.params.bookId, (log) => res.write(`data: ${JSON.stringify(log)}\n\n`)));
 });
 
 /**

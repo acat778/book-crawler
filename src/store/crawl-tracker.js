@@ -24,9 +24,45 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appendTaskLog } from '../persistence/task-log-repository.js';
+import { publishTaskEvent } from '../realtime/task-events.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', '..', 'data', 'crawls');
+const INDEX_FILE = path.join(DATA_DIR, 'task-index.json');
+
+function toSummary(record) {
+  const chapters = Array.isArray(record.chapters) ? record.chapters : [];
+  const chapterLinks = Array.isArray(record.chapterLinks) ? record.chapterLinks : [];
+  const crawledChapters = chapters.filter((chapter) => chapter.status === 'crawled').length;
+  const failedChapters = chapters.filter((chapter) => chapter.status === 'failed').length;
+  return {
+    bookId: record.bookId,
+    title: record.title,
+    authorName: record.authorName,
+    url: record.url,
+    status: record.status,
+    totalChapters: chapterLinks.length,
+    crawledChapters,
+    failedChapters,
+    pendingChapters: Math.max(0, chapterLinks.length - crawledChapters - failedChapters),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+async function updateIndex(record, deletedBookId) {
+  let index = [];
+  try {
+    index = JSON.parse(await fs.readFile(INDEX_FILE, 'utf-8'));
+  } catch { /* 首次创建索引 */ }
+  const taskId = deletedBookId || record?.bookId;
+  index = index.filter((item) => item.bookId !== taskId);
+  if (record) index.push(toSummary(record));
+  index.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+  await fs.writeFile(INDEX_FILE, JSON.stringify(index), 'utf-8');
+  publishTaskEvent(record ? { type: 'upsert', task: toSummary(record) } : { type: 'delete', taskId });
+}
 
 /**
  * 确保 data/crawls 目录存在
@@ -68,6 +104,7 @@ async function readRecord(bookId) {
 async function writeRecord(bookId, data) {
   await ensureDir();
   await fs.writeFile(filePath(bookId), JSON.stringify(data, null, 2), 'utf-8');
+  await updateIndex(data);
 }
 
 /**
@@ -110,6 +147,7 @@ export async function initCrawlRecord(bookId, title, authorName, url, catalogUrl
   };
 
   await writeRecord(bookId, doc);
+  void appendTaskLog(bookId, 'info', `创建爬取任务：${title}，共 ${chapterLinks.length} 章`);
   console.log(`[CrawlTracker] 爬取记录已创建: bookId=${bookId}, chapters=${chapterLinks.length}`);
   return doc;
 }
@@ -128,6 +166,7 @@ export async function updateCrawlBookStatus(bookId, status) {
   record.status = status;
   record.updatedAt = new Date().toISOString();
   await writeRecord(bookId, record);
+  void appendTaskLog(bookId, status === 'failed' ? 'error' : 'info', `任务状态更新为 ${status}`);
 }
 
 /**
@@ -156,6 +195,7 @@ export async function appendCrawlChapter(bookId, chapterId, title, url, sortOrde
   });
   record.updatedAt = new Date().toISOString();
   await writeRecord(bookId, record);
+  void appendTaskLog(bookId, status === 'failed' ? 'error' : 'info', `${status === 'failed' ? '章节失败' : '章节完成'}：${title}`);
 }
 
 /**
@@ -173,25 +213,18 @@ export async function getCrawlRecord(bookId) {
  */
 export async function listCrawlRecords() {
   await ensureDir();
-  const files = await fs.readdir(DATA_DIR);
-  const records = [];
-
-  for (const name of files) {
-    if (!name.endsWith('.json')) continue;
-
-    try {
-      const raw = await fs.readFile(path.join(DATA_DIR, name), 'utf-8');
-      records.push(JSON.parse(raw));
-    } catch (err) {
-      console.warn(`[CrawlTracker] 读取爬取记录失败: ${name} - ${err.message}`);
-    }
+  try {
+    return JSON.parse(await fs.readFile(INDEX_FILE, 'utf-8'));
+  } catch {
+    const files = (await fs.readdir(DATA_DIR)).filter((name) => name.endsWith('.json') && name !== 'task-index.json');
+    const records = (await Promise.all(files.map(async (name) => {
+      try { return JSON.parse(await fs.readFile(path.join(DATA_DIR, name), 'utf-8')); }
+      catch (err) { console.warn(`[CrawlTracker] 读取爬取记录失败: ${name} - ${err.message}`); return null; }
+    }))).filter(Boolean);
+    const summaries = records.map(toSummary).sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+    await fs.writeFile(INDEX_FILE, JSON.stringify(summaries), 'utf-8');
+    return summaries;
   }
-
-  return records.sort((left, right) => {
-    const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime();
-    const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime();
-    return rightTime - leftTime;
-  });
 }
 
 /**
@@ -201,6 +234,7 @@ export async function listCrawlRecords() {
 export async function deleteCrawlRecord(bookId) {
   try {
     await fs.unlink(filePath(bookId));
+    await updateIndex(null, bookId);
     console.log(`[CrawlTracker] 爬取记录已删除: bookId=${bookId}`);
   } catch {
     // 文件不存在，无需处理

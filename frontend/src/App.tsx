@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type SiteId = '69shuba' | 'alicesw';
 type TabKey = 'search' | 'tasks';
@@ -51,6 +51,9 @@ interface TasksResponse {
   tasks: CrawlTask[];
 }
 
+interface TaskLog { level: string; message: string; time: string }
+interface LogPage { list: TaskLog[]; hasMore: boolean; nextBefore: string | null }
+
 const API = '/api/crawler';
 
 const STATUS_MAP: Record<string, { text: string; color: string; background: string; border: string }> = {
@@ -90,6 +93,12 @@ export default function App() {
   const [tasks, setTasks] = useState<CrawlTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [taskError, setTaskError] = useState('');
+  const [logTask, setLogTask] = useState<CrawlTask | null>(null);
+  const [logs, setLogs] = useState<TaskLog[]>([]);
+  const [logCursor, setLogCursor] = useState<string | null>(null);
+  const [logHasMore, setLogHasMore] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const logRef = useRef<HTMLDivElement>(null);
 
   const fetchTasks = async () => {
     setTaskError('');
@@ -106,9 +115,57 @@ export default function App() {
 
   useEffect(() => {
     fetchTasks();
-    const interval = window.setInterval(fetchTasks, 5000);
-    return () => window.clearInterval(interval);
+    const source = new EventSource(`${API}/events`);
+    source.onmessage = (event) => {
+      const payload = JSON.parse(event.data) as { type: 'upsert' | 'delete'; task?: CrawlTask; taskId?: string };
+      if (payload.type === 'delete' && payload.taskId) {
+        setTasks((current) => current.filter((task) => task.bookId !== payload.taskId));
+      } else if (payload.task) {
+        setTasks((current) => [payload.task!, ...current.filter((task) => task.bookId !== payload.task!.bookId)]
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+      }
+    };
+    return () => source.close();
   }, []);
+
+  useEffect(() => {
+    if (!logTask) return;
+    const source = new EventSource(`${API}/tasks/${logTask.bookId}/logs/stream`);
+    source.onmessage = (event) => setLogs((current) => [...current, JSON.parse(event.data) as TaskLog]);
+    return () => source.close();
+  }, [logTask]);
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [logs]);
+
+  const openLogs = async (task: CrawlTask) => {
+    setLoadingLogs(true);
+    try {
+      const response = await fetch(`${API}/tasks/${task.bookId}/logs?limit=200`);
+      const page = await response.json() as LogPage;
+      setLogs(page.list || []);
+      setLogCursor(page.nextBefore);
+      setLogHasMore(page.hasMore);
+      setLogTask(task);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const loadEarlierLogs = async () => {
+    if (!logTask || !logCursor || loadingLogs) return;
+    setLoadingLogs(true);
+    try {
+      const response = await fetch(`${API}/tasks/${logTask.bookId}/logs?limit=200&before=${encodeURIComponent(logCursor)}`);
+      const page = await response.json() as LogPage;
+      setLogs((current) => [...(page.list || []), ...current]);
+      setLogCursor(page.nextBefore);
+      setLogHasMore(page.hasMore);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
 
   const handleSearch = async (page = 0) => {
     if (!keyword.trim()) return;
@@ -366,7 +423,7 @@ export default function App() {
                       <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8' }}>书籍</th>
                       <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 160 }}>进度</th>
                       <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 160 }}>更新时间</th>
-                      <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 80 }}>来源</th>
+                      <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 130 }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -410,7 +467,8 @@ export default function App() {
                             {formatDate(task.updatedAt)}
                           </td>
                           <td style={{ padding: 12, borderBottom: '1px solid #f0f0f0' }}>
-                            <a href={task.url} target="_blank" rel="noopener noreferrer" style={{ color: '#1677ff' }}>打开</a>
+                            <a href={task.url} target="_blank" rel="noopener noreferrer" style={{ color: '#1677ff', marginRight: 12 }}>打开</a>
+                            <button onClick={() => openLogs(task)} style={{ border: 0, padding: 0, background: 'none', color: '#1677ff', cursor: 'pointer' }}>日志</button>
                           </td>
                         </tr>
                       );
@@ -426,6 +484,24 @@ export default function App() {
           </div>
         )}
       </div>
+      {logTask && (
+        <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'grid', placeItems: 'center', zIndex: 1000 }}>
+          <div style={{ width: 'min(760px, 90vw)', background: '#fff', borderRadius: 8, padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <strong>日志 - {logTask.title}</strong>
+              <button onClick={() => { setLogTask(null); setLogs([]); }} style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20 }}>×</button>
+            </div>
+            {logHasMore && <button disabled={loadingLogs} onClick={loadEarlierLogs} style={{ width: '100%', marginBottom: 8 }}>{loadingLogs ? '加载中...' : '加载更早日志'}</button>}
+            <div ref={logRef} style={{ maxHeight: 420, overflow: 'auto', fontFamily: 'monospace', fontSize: 12 }}>
+              {logs.map((log, index) => (
+                <div key={`${log.time}-${index}`} style={{ padding: '3px 0', color: log.level === 'error' ? '#cf1322' : log.level === 'warn' ? '#d46b08' : '#333' }}>
+                  <span style={{ color: '#999' }}>{log.time?.slice(11, 19)}</span> {log.message}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
