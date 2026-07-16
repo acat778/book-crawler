@@ -1,12 +1,7 @@
-# 仅排除无需打包进镜像的文件
-logs/
-data/
-.git/
-.gitlab-backup/
-frontend/src/
-frontend/public/
+.git
+.codegraph
+node_modules
+dist
+coverage
 *.log
-.env
-.env.*
-.DS_Store
-Thumbs.db
+data
