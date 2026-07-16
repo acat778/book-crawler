@@ -24,6 +24,14 @@ function wordCount(content) {
   return String(content || '').replace(/\s/g, '').length
 }
 
+function extensionFromContentType(contentType) {
+  if (contentType.includes('png')) return 'png'
+  if (contentType.includes('webp')) return 'webp'
+  if (contentType.includes('gif')) return 'gif'
+  if (contentType.includes('avif')) return 'avif'
+  return 'jpg'
+}
+
 async function getDict(dictCodeValue, dictName) {
   const existing = await prisma.acatDict.findFirst({
     where: { code: dictCodeValue, scope: 1, isDeleted: 0 },
@@ -253,8 +261,8 @@ export const bookRepository = {
     const resp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 })
     const body = Buffer.from(resp.data)
     const contentType = resp.headers['content-type'] || 'image/jpeg'
-    const fileName = `cover_${nowId()}.jpg`
-    const objectName = `book-cover/${fileName}`
+    const fileName = `${nowId()}.${extensionFromContentType(contentType)}`
+    const objectName = `acat-fun/read/book/cover/${fileName}`
     await uploadObject({ key: objectName, body, contentType })
     const file = await prisma.acatFile.create({
       data: {

@@ -12,11 +12,11 @@ export default {
   },
 
   storage: {
-    endpoint: process.env.RUSTFS_ENDPOINT || 'http://localhost:9002',
-    accessKey: process.env.RUSTFS_ACCESS_KEY || 'rustfsadmin',
-    secretKey: process.env.RUSTFS_SECRET_KEY || 'rustfsadmin',
-    bucket: process.env.RUSTFS_BUCKET || 'acat-book',
-    region: process.env.RUSTFS_REGION || 'us-east-1',
+    endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:9003',
+    accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+    secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+    bucket: process.env.MINIO_BUCKET || 'acat-book',
+    region: process.env.MINIO_REGION || 'us-east-1',
   },
 
   crawler: {

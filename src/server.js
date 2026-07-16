@@ -49,7 +49,7 @@ async function main() {
     console.log(`  Book Crawler Server v2.0.0`);
     console.log(`  http://localhost:${port}`);
     console.log(`  API: http://localhost:${port}/api/crawler`);
-    console.log(`  Persistence: Prisma + MongoDB + RustFS`);
+    console.log(`  Persistence: Prisma + MongoDB + MinIO`);
     console.log(`========================================\n`);
   });
 }

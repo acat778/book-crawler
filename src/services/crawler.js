@@ -19,7 +19,7 @@ import config from '../config.js';
  *
  * 持久化策略：
  * - 元数据通过 Prisma 直写 MySQL，正文通过 MongoDB Driver 写入 MongoDB
- * - 封面通过 S3 SDK 写入 RustFS
+ * - 封面通过 S3 SDK 写入 MinIO
  * - 爬取状态通过本地 JSON 文件追踪
  */
 export class CrawlerService {

@@ -10,7 +10,7 @@ module.exports = {
         PORT: 8609,
         DATABASE_URL: process.env.DATABASE_URL,
         MONGO_URI: process.env.MONGO_URI,
-        RUSTFS_ENDPOINT: process.env.RUSTFS_ENDPOINT,
+        MINIO_ENDPOINT: process.env.MINIO_ENDPOINT,
         GOOGLE_SEARCH_URL: 'https://www.google.com/search',
         BASE_URL: 'https://www.69shuba.com',
       },

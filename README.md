@@ -175,8 +175,8 @@ POST /api/crawler/crawl-chapter?url={章节URL}
 | `PORT` | `8609` | 服务端口 |
 | `DATABASE_URL` | — | Prisma MySQL 连接串 |
 | `MONGO_URI` | — | MongoDB 连接串 |
-| `RUSTFS_ENDPOINT` | `http://localhost:9002` | RustFS/S3 地址 |
-| `RUSTFS_BUCKET` | `acat-book` | 小说文件 Bucket |
+| `MINIO_ENDPOINT` | `http://localhost:9003` | MinIO/S3 地址 |
+| `MINIO_BUCKET` | `acat-book` | 小说文件 Bucket |
 | `GOOGLE_SEARCH_URL` | `https://www.google.com/search` | Google 搜索地址 |
 
 ## 部署

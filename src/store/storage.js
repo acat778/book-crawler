@@ -17,7 +17,7 @@ const COVER_FILE_ID = '0';
  *
  * - 书籍元数据和章节元数据通过 Prisma 直写 MySQL
  * - 章节正文通过 MongoDB Driver 写入 MongoDB
- * - 封面图片通过 S3 SDK 写入 RustFS
+ * - 封面图片通过 S3 SDK 写入 MinIO
  * - 爬取状态通过本地文件追踪（data/crawls/）
  */
 export class StorageService {
