@@ -281,7 +281,7 @@ export const bookRepository = {
     return file.id
   },
 
-  async createChapterWithContent(bookId, title, content) {
+  async createChapterWithContent(bookId, title, content, sortOrder) {
     const existing = await prisma.readBookChapter.findFirst({
       where: { bookId, title, isDeleted: 0 },
     })
@@ -293,6 +293,7 @@ export const bookRepository = {
           data: {
             wordCount: wordCount(content),
             status: 1,
+            sortOrder: sortOrder ?? existing.sortOrder,
             updateBy: CRAWLER_USER_ID,
           },
         })
@@ -312,7 +313,7 @@ export const bookRepository = {
         bookId,
         title,
         status: 1,
-        sortOrder: (max._max.sortOrder || 0) + 1,
+        sortOrder: sortOrder ?? (max._max.sortOrder || 0) + 1,
         wordCount: wordCount(content),
         createBy: CRAWLER_USER_ID,
         updateBy: CRAWLER_USER_ID,
@@ -333,6 +334,50 @@ export const bookRepository = {
     })
     await updateBookStats(chapter.bookId)
     return appended
+  },
+
+  /**
+   * 重新爬取单章前清理旧章节。先置为草稿，再删除正文并软删除元数据，
+   * 避免清理过程中旧内容继续对读者可见。
+   */
+  async prepareChapterRecrawl(chapterId) {
+    const chapter = await prisma.readBookChapter.findFirst({
+      where: { id: chapterId, isDeleted: 0 },
+    })
+    if (!chapter) return false
+    await prisma.readBookChapter.update({
+      where: { id: chapter.id },
+      data: { status: 0, wordCount: 0, updateBy: CRAWLER_USER_ID },
+    })
+    const db = await getMongoDb()
+    await db.collection('chapters').deleteOne({ _id: chapter.id })
+    await prisma.readBookChapter.update({
+      where: { id: chapter.id },
+      data: { isDeleted: 1, updateBy: CRAWLER_USER_ID },
+    })
+    await updateBookStats(chapter.bookId)
+    return true
+  },
+
+  /** 全本重爬前清理全部章节及 MongoDB 正文，保留书籍元数据。 */
+  async prepareBookRecrawl(bookId) {
+    const chapters = await prisma.readBookChapter.findMany({
+      where: { bookId, isDeleted: 0 },
+      select: { id: true },
+    })
+    if (chapters.length === 0) return 0
+    await prisma.readBookChapter.updateMany({
+      where: { bookId, isDeleted: 0 },
+      data: { status: 0, wordCount: 0, updateBy: CRAWLER_USER_ID },
+    })
+    const db = await getMongoDb()
+    await db.collection('chapters').deleteMany({ book_id: bookId })
+    await prisma.readBookChapter.updateMany({
+      where: { bookId, isDeleted: 0 },
+      data: { isDeleted: 1, updateBy: CRAWLER_USER_ID },
+    })
+    await updateBookStats(bookId)
+    return chapters.length
   },
 
   async reportTaskStatus(bookId, status, extra = {}) {

@@ -121,7 +121,7 @@ async function writeRecord(bookId, data) {
  * @param {Array<{title: string, url: string, sortOrder: number}>} chapterLinks - 完整章节列表
  * @returns {Promise<object>} 爬取记录
  */
-export async function initCrawlRecord(bookId, title, authorName, url, catalogUrl, chapterLinks) {
+export async function initCrawlRecord(bookId, title, authorName, url, catalogUrl, chapterLinks, site) {
   const existing = await readRecord(bookId);
   if (existing) {
     console.log(`[CrawlTracker] 爬取记录已存在: bookId=${bookId}, status=${existing.status}`);
@@ -134,6 +134,7 @@ export async function initCrawlRecord(bookId, title, authorName, url, catalogUrl
     title,
     authorName,
     url,
+    site,
     status: 'pending',
     catalogUrl,
     chapterLinks: chapterLinks.map((ch, i) => ({

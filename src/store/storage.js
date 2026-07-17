@@ -115,10 +115,10 @@ export class StorageService {
    * 创建章节（含内容），大内容自动拆分为多次追加
    * 分批写入失败时向上抛错，避免任务误报成功。
    */
-  async createChapterWithContent(bookId, title, paragraphs) {
+  async createChapterWithContent(bookId, title, paragraphs, sortOrder) {
     if (!paragraphs || paragraphs.length === 0) {
       // 空内容 — 直接创建空章节
-      return this.repository.createChapterWithContent(bookId, title, '');
+      return this.repository.createChapterWithContent(bookId, title, '', sortOrder);
     }
 
     const content = paragraphs.join('\n\n');
@@ -126,14 +126,14 @@ export class StorageService {
 
     if (jsonSize <= 400 * 1024) {
       // 内容适中 — 一步创建
-      const result = await this.repository.createChapterWithContent(bookId, title, content);
+      const result = await this.repository.createChapterWithContent(bookId, title, content, sortOrder);
       console.log(`[Storage] 创建章节: bookId=${bookId}, title=${title}, id=${result.id}, size=${(jsonSize / 1024).toFixed(1)}KB`);
       return result;
     }
 
     // 内容过大 — 先创建空章节，再分批追加段落
     console.log(`[Storage] 章节过大 (${(jsonSize / 1024).toFixed(1)}KB)，拆分发送: ${title}`);
-    const chapter = await this.repository.createChapterWithContent(bookId, title, '');
+    const chapter = await this.repository.createChapterWithContent(bookId, title, '', sortOrder);
 
     // 分批追加段落（每批最多 200KB）
     await this.#appendParagraphsInBatches(chapter.id, paragraphs);
@@ -144,7 +144,7 @@ export class StorageService {
    * 创建空章节（无内容 / 正文为空时回退）
    */
   async createChapter(bookId, title, sortOrder, wordCount = 0) {
-    return this.repository.createChapterWithContent(bookId, title, '');
+    return this.repository.createChapterWithContent(bookId, title, '', sortOrder);
   }
 
   /**
@@ -153,6 +153,14 @@ export class StorageService {
   async saveChapterContent(chapterId, paragraphs) {
     if (!paragraphs || paragraphs.length === 0) return 0;
     return this.#appendParagraphsInBatches(chapterId, paragraphs);
+  }
+
+  async prepareChapterRecrawl(chapterId) {
+    return this.repository.prepareChapterRecrawl(chapterId);
+  }
+
+  async prepareBookRecrawl(bookId) {
+    return this.repository.prepareBookRecrawl(bookId);
   }
 
   /**
@@ -199,8 +207,8 @@ export class StorageService {
 
   // ==================== 爬取状态追踪（本地文件） ====================
 
-  async initCrawlRecord(bookId, title, authorName, url, catalogUrl, chapterLinks) {
-    return initCrawlRecord(bookId, title, authorName, url, catalogUrl, chapterLinks);
+  async initCrawlRecord(bookId, title, authorName, url, catalogUrl, chapterLinks, site) {
+    return initCrawlRecord(bookId, title, authorName, url, catalogUrl, chapterLinks, site);
   }
 
   async setCrawlBookStatus(bookId, status) {

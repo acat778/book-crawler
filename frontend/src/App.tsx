@@ -38,6 +38,7 @@ interface CrawlTask {
   title: string;
   authorName: string;
   url: string;
+  site?: SiteId;
   status: string;
   totalChapters: number;
   crawledChapters: number;
@@ -92,6 +93,7 @@ export default function App() {
   const [hasMore, setHasMore] = useState(false);
   const [tasks, setTasks] = useState<CrawlTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [taskAction, setTaskAction] = useState<string | null>(null);
   const [taskError, setTaskError] = useState('');
   const [logTask, setLogTask] = useState<CrawlTask | null>(null);
   const [logs, setLogs] = useState<TaskLog[]>([]);
@@ -222,6 +224,45 @@ export default function App() {
     setLoadingTasks(true);
     await fetchTasks();
     setLoadingTasks(false);
+  };
+
+  const handleRetryFailed = async (task: CrawlTask) => {
+    setTaskAction(`retry:${task.bookId}`);
+    setTaskError('');
+    try {
+      const response = await fetch(`${API}/tasks/${task.bookId}/retry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site: task.site }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      await fetchTasks();
+    } catch (err) {
+      setTaskError(err instanceof Error ? err.message : '失败章节重爬失败');
+    } finally {
+      setTaskAction(null);
+    }
+  };
+
+  const handleRecrawlAll = async (task: CrawlTask) => {
+    if (!window.confirm(`全本重爬会先删除《${task.title}》的全部章节内容，确定继续？`)) return;
+    setTaskAction(`all:${task.bookId}`);
+    setTaskError('');
+    try {
+      const response = await fetch(`${API}/tasks/${task.bookId}/recrawl`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site: task.site }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      await fetchTasks();
+    } catch (err) {
+      setTaskError(err instanceof Error ? err.message : '全本重爬失败');
+    } finally {
+      setTaskAction(null);
+    }
   };
 
   return (
@@ -423,7 +464,7 @@ export default function App() {
                       <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8' }}>书籍</th>
                       <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 160 }}>进度</th>
                       <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 160 }}>更新时间</th>
-                      <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 130 }}>操作</th>
+                      <th style={{ padding: 12, borderBottom: '1px solid #e8e8e8', width: 260 }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -468,7 +509,23 @@ export default function App() {
                           </td>
                           <td style={{ padding: 12, borderBottom: '1px solid #f0f0f0' }}>
                             <a href={task.url} target="_blank" rel="noopener noreferrer" style={{ color: '#1677ff', marginRight: 12 }}>打开</a>
-                            <button onClick={() => openLogs(task)} style={{ border: 0, padding: 0, background: 'none', color: '#1677ff', cursor: 'pointer' }}>日志</button>
+                            <button onClick={() => openLogs(task)} style={{ border: 0, padding: 0, marginRight: 12, background: 'none', color: '#1677ff', cursor: 'pointer' }}>日志</button>
+                            {task.failedChapters > 0 && (
+                              <button
+                                onClick={() => handleRetryFailed(task)}
+                                disabled={taskAction !== null}
+                                style={{ border: 0, padding: 0, marginRight: 12, background: 'none', color: '#d46b08', cursor: 'pointer' }}
+                              >
+                                {taskAction === `retry:${task.bookId}` ? '重爬中...' : '重爬失败章节'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleRecrawlAll(task)}
+                              disabled={taskAction !== null}
+                              style={{ border: 0, padding: 0, background: 'none', color: '#cf1322', cursor: 'pointer' }}
+                            >
+                              {taskAction === `all:${task.bookId}` ? '重爬中...' : '全本重爬'}
+                            </button>
                           </td>
                         </tr>
                       );

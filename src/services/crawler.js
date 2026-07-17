@@ -210,7 +210,7 @@ export class CrawlerService {
         }
       } else {
         await this.storage.initCrawlRecord(
-          bookId, title, authorName || '佚名', bookUrl, catalogUrl, allChapterLinks,
+          bookId, title, authorName || '佚名', bookUrl, catalogUrl, allChapterLinks, siteId,
         );
       }
 
@@ -237,7 +237,9 @@ export class CrawlerService {
             const wordCount = paragraphs.reduce((sum, p) => sum + p.length, 0);
 
             // 4b. 创建章节并同步内容（含 \\n\\n 分段，一步完成）
-            const chapter = await this.storage.createChapterWithContent(bookId, chapterTitle, paragraphs);
+            const chapter = await this.storage.createChapterWithContent(
+              bookId, chapterTitle, paragraphs, sortOrder,
+            );
             await this.storage.recordCrawledChapter(bookId, chapter.id, chapterTitle, chapterUrl, chapter.sortOrder, wordCount);
             savedCount++;
           } else {

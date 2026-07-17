@@ -80,6 +80,7 @@ GET /api/crawler/tasks
       "title": "赘婿",
       "authorName": "愤怒的香蕉",
       "url": "https://...",
+      "site": "69shuba",
       "totalChapters": 100,
       "crawledChapters": 100,
       "failedChapters": 0,
@@ -100,7 +101,29 @@ Content-Type: application/json
 { "url": "https://...", "site": "69shuba" }
 ```
 
-## 5. 重新爬取
+## 5. 重爬失败章节
+
+```
+POST /api/crawler/tasks/{bookId}/retry
+Content-Type: application/json
+
+{ "site": "69shuba" }
+```
+
+只处理任务中状态为 `failed` 的章节。每章开始前先将旧章节设为草稿，再删除 MySQL 章节元数据和 MongoDB 正文；重新抓取成功后创建并发布新章节，失败时保持不可见。
+
+## 6. 全本重新爬取
+
+任务页使用保存的来源地址：
+
+```
+POST /api/crawler/tasks/{bookId}/recrawl
+Content-Type: application/json
+
+{ "site": "69shuba" }
+```
+
+兼容入口：
 
 ```
 POST /api/crawler/re-crawl
@@ -109,7 +132,9 @@ Content-Type: application/json
 { "bookId": "uuid", "url": "https://...", "site": "69shuba" }
 ```
 
-## 6. 查询爬取状态
+全本重爬会先隐藏并软删除该书全部 MySQL 章节，删除 MongoDB 正文和本地任务记录，再按最新目录重建。书籍元数据和封面保留。
+
+## 7. 查询爬取状态
 
 ```
 GET /api/crawler/status/{bookId}

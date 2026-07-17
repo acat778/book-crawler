@@ -24,6 +24,7 @@ function toTaskSummary(record) {
     title: record.title,
     authorName: record.authorName,
     url: record.url,
+    site: record.site,
     totalChapters: totalCount,
     crawledChapters: crawledCount,
     failedChapters: failedCount,
@@ -143,8 +144,8 @@ router.post('/crawl-chapter', async (req, res) => {
 
 /**
  * POST /api/crawler/re-crawl
- * 重新爬取一本书（删除已有 crawler 记录，从头爬取）
- * Body: { bookId: number, url: string }
+ * 重新爬取一本书（清理全部章节正文和 crawler 记录后从头爬取）
+ * Body: { bookId: string, url: string, site?: string }
  */
 router.post('/re-crawl', async (req, res) => {
   try {
@@ -154,9 +155,9 @@ router.post('/re-crawl', async (req, res) => {
       return res.status(400).json({ error: 'bookId 和 url 参数不能为空' });
     }
 
-    // 删除爬取记录以强制重新爬取
+    await crawlerService.storage.prepareBookRecrawl(String(bookId));
     await crawlerService.storage.deleteCrawlRecord(bookId);
-    console.log(`[API] 已删除爬取记录: bookId=${bookId}`);
+    console.log(`[API] 已清理章节内容和爬取记录: bookId=${bookId}`);
 
     // 触发爬取
     const result = await crawlerService.crawl(url.trim(), 0, site);
@@ -168,6 +169,27 @@ router.post('/re-crawl', async (req, res) => {
 });
 
 /**
+ * POST /api/crawler/tasks/:bookId/recrawl
+ * 使用任务保存的来源地址执行全本重爬。
+ */
+router.post('/tasks/:bookId/recrawl', async (req, res) => {
+  try {
+    const { bookId } = req.params;
+    const record = await crawlerService.storage.getCrawlRecord(bookId);
+    if (!record?.url) {
+      return res.status(404).json({ error: '爬取记录或来源地址不存在' });
+    }
+    const removedChapters = await crawlerService.storage.prepareBookRecrawl(bookId);
+    await crawlerService.storage.deleteCrawlRecord(bookId);
+    const result = await crawlerService.crawl(record.url, 0, record.site || req.body?.site);
+    res.json({ ...result, removedChapters });
+  } catch (err) {
+    console.error('[API] /tasks/:bookId/recrawl 错误:', err.message);
+    res.status(500).json({ error: '全本重新爬取失败: ' + err.message });
+  }
+});
+
+/**
  * POST /api/crawler/tasks/:bookId/retry
  * 重试爬取失败的章节（保留已成功的章节，只重试失败的）
  * Body: { url: string, site?: string }
@@ -175,7 +197,7 @@ router.post('/re-crawl', async (req, res) => {
 router.post('/tasks/:bookId/retry', async (req, res) => {
   try {
     const { bookId } = req.params;
-    const { url, site } = req.body;
+    const { site } = req.body;
 
     if (!bookId) {
       return res.status(400).json({ error: 'bookId 参数不能为空' });
@@ -187,10 +209,6 @@ router.post('/tasks/:bookId/retry', async (req, res) => {
     }
 
     const failedChapters = (record.chapters || []).filter(ch => ch.status === 'failed');
-    const crawledUrls = new Set(
-      (record.chapters || []).filter(ch => ch.status === 'crawled').map(ch => ch.url),
-    );
-
     if (failedChapters.length === 0) {
       return res.json({ message: '没有失败的章节需要重试', bookId, retried: 0 });
     }
@@ -207,11 +225,14 @@ router.post('/tasks/:bookId/retry', async (req, res) => {
     for (const chapter of failedChapters) {
       try {
         console.log(`[API] 重试章节: ${chapter.title} (${chapter.url})`);
-        const paragraphs = await crawlerService.crawlChapterContent(chapter.url, null, site);
+        await crawlerService.storage.prepareChapterRecrawl(chapter.id);
+        const paragraphs = await crawlerService.crawlChapterContent(chapter.url, null, site || record.site);
 
         if (paragraphs.length > 0) {
           const wordCount = paragraphs.reduce((sum, p) => sum + p.length, 0);
-          const newChapter = await crawlerService.storage.createChapterWithContent(bookId, chapter.title, paragraphs);
+          const newChapter = await crawlerService.storage.createChapterWithContent(
+            bookId, chapter.title, paragraphs, chapter.sortOrder,
+          );
 
           // 更新记录：移除旧失败记录，添加新成功记录
           const existingRecord = await crawlerService.storage.getCrawlRecord(bookId);
@@ -241,7 +262,7 @@ router.post('/tasks/:bookId/retry', async (req, res) => {
     const finalRecord = await crawlerService.storage.getCrawlRecord(bookId);
     if (finalRecord) {
       const remainingFailed = (finalRecord.chapters || []).filter(c => c.status === 'failed').length;
-      finalRecord.status = remainingFailed > 0 ? 'completed' : 'completed';
+      finalRecord.status = remainingFailed > 0 ? 'failed' : 'completed';
       finalRecord.updatedAt = new Date().toISOString();
       await crawlerService.storage.writeCrawlRecord(bookId, finalRecord);
     }
