@@ -17,13 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 告诉 Puppeteer 使用系统 Chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
 # 后端依赖 + 源码
-COPY node_modules ./node_modules
-COPY package.json .
+COPY package*.json ./
+RUN npm ci --omit=dev
 COPY prisma ./prisma
 RUN npx prisma generate
 COPY src ./src
